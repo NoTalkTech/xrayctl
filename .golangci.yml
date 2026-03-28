@@ -1,0 +1,190 @@
+# .golangci.yml - golangci-lint configuration
+
+run:
+  timeout: 5m
+  tests: true
+  skip-dirs:
+    - .git
+    - vendor
+  skip-files:
+    - ".*_test\\.go$"
+
+linters:
+  enable:
+    - asasalint
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - containedctx
+    - contextcheck
+    - dupl
+    - dupword
+    - durationcheck
+    - errcheck
+    - errname
+    - errorlint
+    - exhaustive
+    - exportloopref
+    - funlen
+    - gci
+    - ginkgolinter
+    - goconst
+    - gocritic
+    - gocyclo
+    - godot
+    - godox
+    - gofmt
+    - gofumpt
+    - goheader
+    - goimports
+    - gomoddirectives
+    - gomodguard
+    - goprintffuncname
+    - gosec
+    - gosimple
+    - govet
+    - importas
+    - ineffassign
+    - interfacebloat
+    - ireturn
+    - lll
+    - loggercheck
+    - makezero
+    - misspell
+    - musttag
+    - nakedret
+    - nestif
+    - nilerr
+    - nilnil
+    - noctx
+    - nolintlint
+    - nonamedreturns
+    - nosprintfhostport
+    - paralleltest
+    - prealloc
+    - predeclared
+    - promlinter
+    - reassign
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
+    - staticcheck
+    - stylecheck
+    - tagalign
+    - tenv
+    - testableexamples
+    - testpackage
+    - thelper
+    - tparallel
+    - typecheck
+    - unconvert
+    - unparam
+    - unused
+    - usestdlibvars
+    - whitespace
+    - wsl
+
+linters-settings:
+  revive:
+    rules:
+      - name: exported
+        severity: warning
+      - name: package-comments
+        severity: warning
+      - name: var-naming
+        severity: warning
+      - name: range-val-address
+        severity: warning
+      - name: unused-parameter
+        severity: warning
+
+  gofmt:
+    simplify: true
+
+  gocritic:
+    enabled-tags:
+      - performance
+      - style
+      - diagnostic
+    disabled-checks:
+      - hugeParam  # 大型结构体传递参数警告
+      - singleCaseSwitch
+
+  gocyclo:
+    min-complexity: 15  # 圈复杂度阈值
+
+  funlen:
+    lines: 100  # 函数最大行数
+    statements: 50  # 函数最大语句数
+
+  gosec:
+    excludes:
+      - G101  # 硬编码凭证警告（部分常量是正常的）
+      - G107  # 用户输入URL访问警告
+
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+  govet:
+    check-shadowing: true
+    settings:
+      printf:
+        funcs:
+          - Log
+          - Logf
+
+  goimports:
+    local-prefixes: xrayctl
+
+  gci:
+    sections:
+      - standard
+      - default
+      - prefix(xrayctl)
+
+  wsl:
+    strict-append: true
+    allow-assign-and-call: true
+    allow-separated-leading-comment: true
+    allow-cuddle-declarations: true
+    allow-trailing-comment: true
+    force-case-trailing-whitespace: 3
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+  exclude-rules:
+    # 测试文件排除一些规则
+    - path: _test\.go
+      linters:
+        - funlen
+        - gocritic
+        - gocyclo
+        - dupl
+
+    # 自动生成的代码
+    - path: \.pb\.go$
+      linters:
+        - all
+
+    # vendor目录
+    - path: vendor/
+      linters:
+        - all
+
+  exclude-use-default: false
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+  uniq-by-line: true
+
+severity:
+  default-severity: warning
