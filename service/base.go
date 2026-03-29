@@ -97,7 +97,7 @@ func InstallBase() error {
 	internal.PrintYellow("正在安装系统依赖与开启 BBR 加速...")
 
 	// 检查所有必需命令是否已存在
-	requiredCmds := []string{"curl", "jq", "nginx", "uuidgen", "socat", "lsb_release", "gpg", "systemctl"}
+	requiredCmds := []string{"curl", "jq", "nginx", "uuidgen", "socat", "lsb_release", "gpg", "systemctl", "wget"}
 	missingCmds := []string{}
 	for _, cmd := range requiredCmds {
 		if !internal.CommandExists(cmd) {
@@ -109,38 +109,36 @@ func InstallBase() error {
 	if len(missingCmds) == 0 {
 		internal.PrintGreen("所有依赖已安装，跳过安装步骤")
 	} else {
+		missedCmdsStr := strings.Join(missingCmds, " ")
 		// 检测系统类型
 		var installCmd string
 		var pkgManager string
 		if internal.CommandExists("apt") {
 			// Debian/Ubuntu系
-			installCmd = "apt update && apt install -y curl jq nginx uuid-runtime socat lsb-release gpg"
+			installCmd = "apt update && apt install -y " + missedCmdsStr
 			pkgManager = "apt"
 		} else if internal.CommandExists("yum") {
 			// CentOS/RHEL系
-			installCmd = "yum install -y curl jq nginx uuid socat redhat-lsb-core gnupg2"
+			installCmd = "yum install -y " + missedCmdsStr
 			pkgManager = "yum"
 		} else if internal.CommandExists("dnf") {
 			// 新CentOS/Fedora
-			installCmd = "dnf install -y curl jq nginx uuid socat lsb-release gnupg2"
+			installCmd = "dnf install -y " + missedCmdsStr
 			pkgManager = "dnf"
 		} else {
 			internal.PrintRed("不支持的系统类型，仅支持Debian/Ubuntu/CentOS")
 			return fmt.Errorf("unsupported system")
 		}
-        
-		for _, missingCmd := range missingCmds {
-		    internal.PrintGreen("检测到包管理器: %s", pkgManager)
-		    internal.PrintYellow("缺失依赖: %v", missingCmd)
 
-		    // 执行安装
-		    _, err := internal.ExecCommandWithSudo("bash", "-c", installCmd)
-		    if err != nil {
-			    internal.PrintRed("依赖安装失败: %v", err)
-			    return err
-		    }
+		internal.PrintGreen("检测到包管理器: %s", pkgManager)
+		internal.PrintYellow("缺失依赖: %v", missedCmdsStr)
+
+		// 执行安装
+		_, err := internal.ExecCommandWithSudo("bash", "-c", installCmd)
+		if err != nil {
+			internal.PrintRed("依赖安装失败: %v", err)
+			return err
 		}
-
 		internal.PrintGreen("系统依赖安装完成")
 	}
 

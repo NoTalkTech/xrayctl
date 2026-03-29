@@ -82,24 +82,14 @@ func SetupCert(cfg *config.Config) error {
 		internal.MkdirIfNotExists(internal.AcmeRootPath, 0755)
 	}
 	if !internal.FileExists(internal.AcmeShPath) {
-		// 方法1: 使用curl安装
-		_, err := internal.ExecCommand("bash", "-c", "curl https://get.acme.sh | sh -s -- --install --force")
+		_, err := internal.ExecCommand("bash", "-c", "curl https://get.acme.sh | sh --install --force")
 		if err != nil {
-			// 方法2: 使用wget安装
-			_, err = internal.ExecCommand("bash", "-c", "wget -O- https://get.acme.sh | sh -s -- --install --force")
+			// 用备用方式
+			_, err = internal.ExecCommand("bash", "-c", "wget -O- https://get.acme.sh | sh --install --force")
 			if err != nil {
-				// 方法3: 直接下载脚本并执行
-				_, err = internal.ExecCommand("bash", "-c", "cd /tmp && curl -s https://get.acme.sh > acme.sh && chmod +x acme.sh && ./acme.sh --install --force")
-				if err != nil {
-					internal.PrintRed("acme.sh安装失败: %v", err)
-					return err
-				}
+				internal.PrintRed("acme.sh安装失败: %v", err)
+				return err
 			}
-		}
-		// 再次检查文件是否存在
-		if !internal.FileExists(internal.AcmeShPath) {
-			internal.PrintRed("acme.sh安装后文件仍未找到: %s", internal.AcmeShPath)
-			return fmt.Errorf("acme.sh not found after installation")
 		}
 	}
 

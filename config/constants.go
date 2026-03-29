@@ -8,7 +8,7 @@ const (
 
 	// Xray相关
 	DefaultXrayConfigPath = "/usr/local/etc/xray/config.json"
-	DefaultCertDir        = "/etc/xray/cert"
+	DefaultCertDir        = "/usr/local/etc/xray/cert"
 
 	// Nginx相关
 	DefaultNginxConfigPath = "/etc/nginx/conf.d/vless.conf"

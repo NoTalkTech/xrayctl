@@ -39,7 +39,6 @@ func SetupXray(cfg *config.Config) error {
 										if firstClient, ok := clients[0].(map[string]interface{}); ok {
 											if id, ok := firstClient["id"].(string); ok {
 												oldUUID = id
-												}
 											}
 										}
 									}
@@ -50,6 +49,7 @@ func SetupXray(cfg *config.Config) error {
 				}
 			}
 		}
+	}
 
 	// 生成UUID：优先使用配置文件中的UUID，然后是现有配置的UUID，最后生成新的
 	uuid := cfg.UUID
@@ -145,7 +145,7 @@ func buildXrayConfigJSON(cfg *config.Config, uuid string) string {
           "address": "127.0.0.1",
           "port": `)
 	builder.WriteString(fmt.Sprintf("%d", cfg.WARPPort))
-	builder.WriteString(`"
+	builder.WriteString(`
         }]
       }
     }
@@ -170,8 +170,9 @@ func buildXrayConfigJSON(cfg *config.Config, uuid string) string {
       "type": "field",
       "outboundTag": "direct",
       "inboundTag": ["VLESS-XTLS-in"]
-    }
-  ]
+      }
+    ]
+  }
 }
 `)
 

@@ -57,14 +57,14 @@ func SetupWarp(cfg *config.Config) error {
 	}
 
 	// 注册WARP
-	_, err := internal.ExecCommand("warp-cli", "registration", "new", "--accept-tos")
+	_, err := internal.ExecCommand("sh", "-c", `echo "y" | script -q -c "warp-cli registration new" /dev/null 2>&1`)
 	if err != nil {
 		// 已经注册过的话忽略错误
 		internal.PrintYellow("WARP已注册，跳过注册步骤")
 	}
 
 	// 设置为代理模式
-	_, err = internal.ExecCommand("warp-cli", "mode", "proxy", "--accept-tos")
+	_, err = internal.ExecCommand("warp-cli", "mode", "proxy")
 	if err != nil {
 		internal.PrintRed("设置WARP代理模式失败: %v", err)
 		return err

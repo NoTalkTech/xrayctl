@@ -65,7 +65,6 @@ func SetupNginxMainConf(cfg *config.Config) error {
             location = /50x.html {
                 root   html;
             }
-		}
 
 	    # 包含自定义配置
 	    include %s/*.conf;
