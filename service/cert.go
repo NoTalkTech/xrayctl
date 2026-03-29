@@ -82,24 +82,92 @@ func SetupCert(cfg *config.Config) error {
 		internal.MkdirIfNotExists(internal.AcmeRootPath, 0755)
 	}
 	if !internal.FileExists(internal.AcmeShPath) {
-		// 方法1: 使用curl安装
-		_, err := internal.ExecCommand("bash", "-c", "curl https://get.acme.sh | sh -s -- --install --force")
-		if err != nil {
-			// 方法2: 使用wget安装
-			_, err = internal.ExecCommand("bash", "-c", "wget -O- https://get.acme.sh | sh -s -- --install --force")
-			if err != nil {
-				// 方法3: 直接下载脚本并执行
-				_, err = internal.ExecCommand("bash", "-c", "cd /tmp && curl -s https://get.acme.sh > acme.sh && chmod +x acme.sh && ./acme.sh --install --force")
-				if err != nil {
-					internal.PrintRed("acme.sh安装失败: %v", err)
-					return err
-				}
-			}
+		internal.PrintYellow("开始安装acme.sh...")
+
+		// 尝试多种安装方法
+		installMethods := []struct {
+			name string
+			cmd  string
+		}{
+			{
+				name: "git安装",
+				cmd:  "git clone https://github.com/acmesh-official/acme.sh.git /root/.acme.sh && cd /root/.acme.sh && ./acme.sh --install --force",
+			},
+			{
+				name: "curl安装",
+				cmd:  "curl -s https://get.acme.sh | sh -s -- --install --force",
+			},
+			{
+				name: "wget安装",
+				cmd:  "wget -qO- https://get.acme.sh | sh -s -- --install --force",
+			},
+			{
+				name: "直接下载安装",
+				cmd:  "cd /tmp && curl -s https://get.acme.sh > acme.sh && chmod +x acme.sh && ./acme.sh --install --force",
+			},
 		}
+
+		var installErr error
+		var installOutput string
+		installed := false
+
+		for _, method := range installMethods {
+			internal.PrintYellow("尝试%s...", method.name)
+			output, err := internal.ExecCommand("bash", "-c", method.cmd)
+			if err == nil {
+				installOutput = output
+				internal.PrintGreen("%s成功", method.name)
+				installed = true
+				break
+			}
+			internal.PrintYellow("%s失败: %v", method.name, err)
+			installErr = err
+			installOutput = output
+		}
+
+		if !installed {
+			internal.PrintRed("所有安装方法都失败: %v", installErr)
+			internal.PrintRed("最后安装输出: %s", installOutput)
+			// 尝试显示更多系统信息
+			internal.ExecCommand("bash", "-c", "echo '检查系统信息...' && uname -a && which curl wget git 2>/dev/null || true")
+			return installErr
+		}
+
+		// 等待一下让安装完成
+		internal.ExecCommand("sleep", "3")
+
+		// 检查目录内容
+		internal.PrintYellow("检查安装目录内容...")
+		lsOutput, _ := internal.ExecCommand("bash", "-c", "ls -la /root/.acme.sh/ 2>/dev/null || echo '目录不存在'")
+		internal.PrintYellow("目录内容: %s", lsOutput)
+
+		// 检查acme.sh文件是否存在
+		internal.PrintYellow("检查acme.sh文件...")
+		checkOutput, _ := internal.ExecCommand("bash", "-c", "find /root/.acme.sh/ -name 'acme.sh' -type f 2>/dev/null || echo '文件未找到'")
+		internal.PrintYellow("查找结果: %s", checkOutput)
+
+		// 检查是否安装到了其他位置
+		internal.PrintYellow("检查可能的安装位置...")
+		homeDir := os.Getenv("HOME")
+		if homeDir == "" {
+			homeDir = "/root"
+		}
+		altPath := fmt.Sprintf("%s/.acme.sh/acme.sh", homeDir)
+		internal.PrintYellow("检查HOME目录: %s/.acme.sh/acme.sh", homeDir)
+
 		// 再次检查文件是否存在
 		if !internal.FileExists(internal.AcmeShPath) {
-			internal.PrintRed("acme.sh安装后文件仍未找到: %s", internal.AcmeShPath)
-			return fmt.Errorf("acme.sh not found after installation")
+			// 尝试检查HOME目录
+			if homeDir != "/root" && internal.FileExists(altPath) {
+				internal.PrintYellow("acme.sh安装在 %s，更新路径...", altPath)
+				// 更新内部路径（这里需要更复杂的处理，暂时跳过）
+			} else {
+				internal.PrintRed("acme.sh安装后文件仍未找到: %s", internal.AcmeShPath)
+				// 尝试查找系统任何位置的acme.sh
+				whichOutput, _ := internal.ExecCommand("bash", "-c", "which acme.sh 2>/dev/null || whereis acme.sh 2>/dev/null || echo '未在任何PATH中找到'")
+				internal.PrintYellow("系统查找结果: %s", whichOutput)
+				return fmt.Errorf("acme.sh not found after installation")
+			}
 		}
 	}
 

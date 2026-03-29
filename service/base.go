@@ -97,7 +97,7 @@ func InstallBase() error {
 	internal.PrintYellow("正在安装系统依赖与开启 BBR 加速...")
 
 	// 检查所有必需命令是否已存在
-	requiredCmds := []string{"curl", "jq", "nginx", "uuidgen", "socat", "lsb_release", "gpg", "systemctl", "wget"}
+	requiredCmds := []string{"curl", "jq", "nginx", "uuidgen", "socat", "lsb_release", "gpg", "systemctl", "wget", "git"}
 	missingCmds := []string{}
 	for _, cmd := range requiredCmds {
 		if !internal.CommandExists(cmd) {
