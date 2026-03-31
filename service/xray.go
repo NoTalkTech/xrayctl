@@ -14,6 +14,9 @@ import (
 func SetupXray(cfg *config.Config) error {
 	internal.PrintYellow("正在部署 Xray 核心...")
 
+	// 确保证书目录存在
+	internal.MkdirIfNotExists(cfg.CertDir, 0755)
+
 	// 安装Xray
 	if !internal.CommandExists("xray") {
 		_, err := internal.ExecCommand("bash", "-c", "curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh | bash -s -- install")
@@ -111,9 +114,10 @@ func buildXrayConfigJSON(cfg *config.Config, uuid string) string {
       }],
       "decryption": "none",
       "fallbacks": [{
-        "dest": `)
-	builder.WriteString(fmt.Sprintf("%d, ", cfg.NginxPort))
-	builder.WriteString(`"xver": 1
+        "dest": "127.0.0.1:`)
+	builder.WriteString(fmt.Sprintf("%d", cfg.NginxPort))
+	builder.WriteString(`",
+        "xver": 1
       }]
     },
     "streamSettings": {
@@ -190,7 +194,7 @@ func generateUUIDFromEmail(email string) string {
 	if email == "" {
 		return baseUUID
 	}
-	// 使用email的MD5哈希作为UUID的后半部分，确保相同email生成相同UUID
+	// 使用email的MD5哈希作为UUID的后部5分，确保相同email生成相同UUID
 	hash := md5.Sum([]byte(email))
 	hashStr := fmt.Sprintf("%x", hash)
 	// 替换baseUUID的尾部

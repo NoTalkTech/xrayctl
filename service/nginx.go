@@ -60,16 +60,16 @@ func SetupNginxMainConf(cfg *config.Config) error {
                 return 403;
             }
 			error_page   500 502 503 504  /50x.html;
-			
+
             location = /50x.html {
                 root   html;
             }
 		}
 
 	    # Include custom configurations
-	    include %s/*.conf;
+	    include /etc/nginx/conf.d/*.conf;
 	}
-	`, nginxUser, nginxUser, nginxWorkerProcesses, hostIP, cfg.NginxConfDir)
+	`, nginxUser, nginxUser, nginxWorkerProcesses, hostIP)
 	// 写入文件
 	err = internal.WriteFile(mainConfPath, []byte(mainConf), 0644)
 	if err != nil {
@@ -78,7 +78,7 @@ func SetupNginxMainConf(cfg *config.Config) error {
 	}
 
 	// 创建网站根目录
-	internal.MkdirIfNotExists(cfg.FallbackPath, 0755)
+	internal.MkdirIfNotExists("/usr/share/nginx/html", 0755)
 
 	return nil
 }
@@ -98,7 +98,7 @@ func SetupNginxVlessConf(cfg *config.Config) error {
     server_name %s;
 
     location ^~ /.well-known/acme-challenge/ {
-        root %s;
+        root /usr/share/nginx/html;
         default_type "text/plain";
         allow all;
     }
@@ -117,7 +117,7 @@ server {
     real_ip_recursive on;
 
     add_header Strict-Transport-Security "max-age=63072000" always;
-    root %s;
+    root /usr/share/nginx/html;
 
     error_page 403 %s;
 
@@ -125,7 +125,7 @@ server {
         return 403;
     }
 }
-`, cfg.Domain, cfg.FallbackPath, cfg.NginxPort, cfg.Domain, cfg.FallbackPath, cfg.FallbackURL)
+`, cfg.Domain, cfg.NginxPort, cfg.Domain, cfg.FallbackURL)
 
 	// 写入文件
 	err := internal.WriteFile(cfg.NginxConfig, []byte(vlessConf), 0644)
@@ -163,7 +163,7 @@ func SetupNginx(cfg *config.Config) error {
 	// 重启Nginx
 	err = internal.RestartService(internal.ServiceNginx)
 	if err != nil {
-		internal.PrintRed("Nginx重启失败: %v", err)
+		internal.PrintRed("Nginxkt启失败: %v", err)
 		return err
 	}
 
