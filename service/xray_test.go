@@ -2,15 +2,13 @@ package service
 
 import (
 	"encoding/json"
-	"strconv"
 	"strings"
 	"testing"
 
 	"xrayctl/config"
 )
 
-func TestXrayConfigGeneration(t *testing.T) {
-	// 创建测试配置
+func TestBuildXrayConfigJSON(t *testing.T) {
 	cfg := &config.Config{
 		Domain:    "test.example.com",
 		UUID:      "test-uuid-1234-5678",
@@ -24,113 +22,80 @@ func TestXrayConfigGeneration(t *testing.T) {
 		},
 	}
 
-	// 测试配置生成逻辑（不实际写入文件）
-	xrayCfg := XrayConfig{}
-	xrayCfg.Log.Loglevel = "warning"
-
-	// 入站配置
-	inbound := struct {
-		Port     int    `json:"port"`
-		Protocol string `json:"protocol"`
-		Tag      string `json:"tag"`
-		Settings struct {
-			Clients []struct {
-				ID   string `json:"id"`
-				Flow string `json:"flow"`
-			} `json:"clients"`
-			Decryption string `json:"decryption"`
-			Fallbacks  []struct {
-				Dest int  `json:"dest"`
-				Xver int  `json:"xver"`
-			} `json:"fallbacks"`
-		} `json:"settings"`
-		StreamSettings struct {
-			Network string `json:"network"`
-			Security string `json:"security"`
-			TlsSettings struct {
-				RejectUnknownSni bool `json:"rejectUnknownSni"`
-				Certificates []struct {
-					CertificateFile string `json:"certificateFile"`
-					KeyFile         string `json:"keyFile"`
-				} `json:"certificates"`
-			} `json:"tlsSettings"`
-		} `json:"streamSettings"`
-	}{}
-	inbound.Port = cfg.XrayPort
-	inbound.Protocol = "VLESS"
-	inbound.Tag = "VLESS-XTLS-in"
-	inbound.Settings.Clients = append(inbound.Settings.Clients, struct {
-		ID   string `json:"id"`
-		Flow string `json:"flow"`
-	}{ID: cfg.UUID, Flow: "xtls-rprx-vision"})
-	inbound.Settings.Decryption = "none"
-	inbound.Settings.Fallbacks = append(inbound.Settings.Fallbacks, struct {
-		Dest int  `json:"dest"`
-		Xver int  `json:"xver"`
-	}{Dest: cfg.NginxPort, Xver: 1})
-	inbound.StreamSettings.Network = "raw"
-	inbound.StreamSettings.Security = "tls"
-	inbound.StreamSettings.TlsSettings.RejectUnknownSni = true
-	inbound.StreamSettings.TlsSettings.Certificates = append(inbound.StreamSettings.TlsSettings.Certificates, struct {
-		CertificateFile string `json:"certificateFile"`
-		KeyFile         string `json:"keyFile"`
-	}{CertificateFile: cfg.CertDir + "/xray.crt", KeyFile: cfg.CertDir + "/xray.key"})
-	xrayCfg.Inbounds = append(xrayCfg.Inbounds, inbound)
-
-	// 序列化测试
-	data, err := json.MarshalIndent(xrayCfg, "", "  ")
+	raw, err := buildXrayConfigJSON(cfg, cfg.UUID)
 	if err != nil {
-		t.Fatalf("Xray config marshal failed: %v", err)
-	}
-	if len(data) == 0 {
-		t.Error("Generated config is empty")
+		t.Fatalf("buildXrayConfigJSON failed: %v", err)
 	}
 
-	// 验证配置内容
-	if xrayCfg.Inbounds[0].Settings.Clients[0].ID != cfg.UUID {
-		t.Errorf("UUID in config expected %s, got %s", cfg.UUID, xrayCfg.Inbounds[0].Settings.Clients[0].ID)
-	}
-	if xrayCfg.Inbounds[0].Port != cfg.XrayPort {
-		t.Errorf("Port expected %d, got %d", cfg.XrayPort, xrayCfg.Inbounds[0].Port)
+	var parsed XrayConfig
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		t.Fatalf("generated JSON does not round-trip: %v", err)
 	}
 
-	t.Log("Xray config generation test passed")
+	if parsed.Log.Loglevel != "warning" {
+		t.Errorf("log level = %q, want warning", parsed.Log.Loglevel)
+	}
+
+	if len(parsed.Inbounds) != 1 {
+		t.Fatalf("inbounds = %d, want 1", len(parsed.Inbounds))
+	}
+	in := parsed.Inbounds[0]
+	if in.Port != cfg.XrayPort {
+		t.Errorf("inbound port = %d, want %d", in.Port, cfg.XrayPort)
+	}
+	if len(in.Settings.Clients) != 1 || in.Settings.Clients[0].ID != cfg.UUID {
+		t.Errorf("inbound client UUID mismatch: %+v", in.Settings.Clients)
+	}
+	if len(in.Settings.Fallbacks) != 1 || in.Settings.Fallbacks[0].Dest != "127.0.0.1:8080" {
+		t.Errorf("fallback dest mismatch: %+v", in.Settings.Fallbacks)
+	}
+	if !in.StreamSettings.TLSSettings.RejectUnknownSni {
+		t.Error("rejectUnknownSni should be true")
+	}
+
+	if len(parsed.Outbounds) != 2 {
+		t.Fatalf("outbounds = %d, want 2", len(parsed.Outbounds))
+	}
+	warpOut := parsed.Outbounds[1]
+	if warpOut.Tag != "warp" || warpOut.Settings == nil ||
+		len(warpOut.Settings.Servers) != 1 ||
+		warpOut.Settings.Servers[0].Port != cfg.WARPPort {
+		t.Errorf("warp outbound malformed: %+v", warpOut)
+	}
+
+	// Every RouteDomain produces a warp rule, plus one trailing direct rule.
+	if got, want := len(parsed.Routing.Rules), len(cfg.RouteDomains)+1; got != want {
+		t.Errorf("routing rules = %d, want %d", got, want)
+	}
+	last := parsed.Routing.Rules[len(parsed.Routing.Rules)-1]
+	if last.OutboundTag != "direct" || len(last.InboundTag) != 1 || last.InboundTag[0] != xrayInboundTag {
+		t.Errorf("last routing rule should be direct fallback, got %+v", last)
+	}
 }
 
-func TestNginxConfigGeneration(t *testing.T) {
-	cfg := &config.Config{
-		Domain:      "test.example.com",
-		NginxPort:   8080,
-		FallbackURL: "https://example.com",
+func TestGenerateUUIDFromEmailIsValid(t *testing.T) {
+	u := generateUUIDFromEmail("user@example.com")
+	if len(u) != 36 {
+		t.Errorf("UUID length = %d, want 36 (%q)", len(u), u)
 	}
-
-	// 生成Nginx配置内容
-	confContent := `server {
-    listen 80;
-    server_name ` + cfg.Domain + `;
-    location / { return 301 https://$host$request_uri; }
+	// Deterministic: same email → same UUID.
+	if u2 := generateUUIDFromEmail("user@example.com"); u != u2 {
+		t.Errorf("UUID not deterministic: %q vs %q", u, u2)
+	}
+	// Different email → different UUID (collisions are astronomically unlikely).
+	if u3 := generateUUIDFromEmail("other@example.com"); u == u3 {
+		t.Errorf("UUID collision across distinct emails: %q", u)
+	}
+	// Shape check: 8-4-4-4-12.
+	parts := strings.Split(u, "-")
+	wantLens := []int{8, 4, 4, 4, 12}
+	if len(parts) != 5 {
+		t.Fatalf("UUID parts = %d, want 5 (%q)", len(parts), u)
+	}
+	for i, p := range parts {
+		if len(p) != wantLens[i] {
+			t.Errorf("UUID part %d len = %d, want %d (%q)", i, len(p), wantLens[i], u)
+		}
+	}
 }
-server {
-    listen 127.0.0.1:` + strconv.Itoa(cfg.NginxPort) + ` proxy_protocol;
-    http2 on;
-    server_name ` + cfg.Domain + `;
-    set_real_ip_from 127.0.0.1;
-    real_ip_header X-Forwarded-For;
-    error_page 403 ` + cfg.FallbackURL + `;
-    location / { return 403; }
-}
-`
 
-	// 验证配置包含必要内容
-	if len(confContent) == 0 {
-		t.Error("Nginx config is empty")
-	}
-	if !strings.Contains(confContent, cfg.Domain) {
-		t.Error("Nginx config should contain domain")
-	}
-	if !strings.Contains(confContent, cfg.FallbackURL) {
-		t.Error("Nginx config should contain fallback URL")
-	}
-
-	t.Log("Nginx config generation test passed")
-}
