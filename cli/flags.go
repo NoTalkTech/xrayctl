@@ -2,6 +2,7 @@ package cli
 
 import (
 	"flag"
+	"fmt"
 	"os"
 
 	"xrayctl/config"
@@ -9,7 +10,7 @@ import (
 	"xrayctl/service"
 )
 
-// ParseFlags 解析命令行参数
+// ParseFlags 解析命令行参数；无参数时返回 false 以便 main 回落到交互菜单。
 func ParseFlags() bool {
 	var (
 		install     = flag.Bool("install", false, "一键完整安装所有组件")
@@ -27,36 +28,76 @@ func ParseFlags() bool {
 
 	flag.Parse()
 
-	// 如果没有任何参数，返回false，显示交互式菜单
+	// 没有任何参数：回到交互菜单
 	if len(os.Args) <= 1 {
 		return false
 	}
 
-	// 检查root权限
 	if !internal.IsRoot() {
 		internal.PrintRed("错误: 请使用 root 运行！")
 		os.Exit(1)
 	}
 
-	// 加载配置
+	// 互斥检查：最多允许一个动作 flag
+	actions := []struct {
+		set  bool
+		name string
+	}{
+		{*install, "--install"},
+		{*status, "--status"},
+		{*restartWarp, "--restart-warp"},
+		{*updateXray, "--update-xray"},
+		{*renewCert, "--renew-cert"},
+		{*backup, "--backup"},
+		{*restore != "", "--restore"},
+		{*uninstall, "--uninstall"},
+	}
+	var chosen []string
+	for _, a := range actions {
+		if a.set {
+			chosen = append(chosen, a.name)
+		}
+	}
+	if len(chosen) > 1 {
+		internal.PrintRed("错误: 一次只能指定一个动作，当前传入了 %v", chosen)
+		os.Exit(1)
+	}
+
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		cfg = config.DefaultConfig()
 	}
 
-	// 覆盖配置
-	if *domain != "" {
+	// 仅在真正被用户覆盖时才写回配置文件
+	dirty := false
+	if *domain != "" && *domain != cfg.Domain {
 		cfg.Domain = *domain
+		dirty = true
 	}
-	if *uuid != "" {
+	if *uuid != "" && *uuid != cfg.UUID {
 		cfg.UUID = *uuid
+		dirty = true
 	}
-	if *warpLicense != "" {
+	if *warpLicense != "" && *warpLicense != cfg.WARPLicense {
 		cfg.WARPLicense = *warpLicense
+		dirty = true
 	}
-	config.SaveConfig(cfg)
+	if dirty {
+		if err := config.SaveConfig(cfg); err != nil {
+			internal.PrintYellow("保存配置失败: %v", err)
+		}
+	}
 
-	// 执行操作
+	// 无动作 flag：只是做了 --domain/--uuid/--warp-license 的配置覆盖
+	if len(chosen) == 0 {
+		if dirty {
+			internal.PrintGreen("配置已更新")
+		} else {
+			fmt.Fprintln(os.Stderr, "未指定任何操作，使用 -h 查看帮助")
+		}
+		return true
+	}
+
 	switch {
 	case *install:
 		internal.PrintGreen("开始一键安装...")
