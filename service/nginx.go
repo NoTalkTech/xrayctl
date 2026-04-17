@@ -1,185 +1,121 @@
 package service
 
 import (
+	"bytes"
+	"embed"
 	"fmt"
+	"text/template"
 
 	"xrayctl/config"
 	"xrayctl/internal"
 )
 
-// SetupNginxMainConf 生成Nginx主配置文件
+//go:embed templates/nginx.conf.tmpl templates/vless.conf.tmpl
+var nginxTemplates embed.FS
+
+var (
+	mainConfTmpl  = template.Must(template.ParseFS(nginxTemplates, "templates/nginx.conf.tmpl"))
+	vlessConfTmpl = template.Must(template.ParseFS(nginxTemplates, "templates/vless.conf.tmpl"))
+)
+
+type nginxMainParams struct {
+	User            string
+	WorkerProcesses string
+}
+
+type nginxVlessParams struct {
+	Domain      string
+	NginxPort   int
+	FallbackURL string
+}
+
+// buildMainConf renders /etc/nginx/nginx.conf from the embedded template.
+func buildMainConf(cfg *config.Config) string {
+	user := cfg.NginxUser
+	if user == "" {
+		user = "nginx"
+	}
+	workers := cfg.NginxWorkerProcesses
+	if workers == "" {
+		workers = "auto"
+	}
+	var buf bytes.Buffer
+	if err := mainConfTmpl.Execute(&buf, nginxMainParams{User: user, WorkerProcesses: workers}); err != nil {
+		// Templates are embedded and tested — an error here is a programmer bug.
+		panic(fmt.Errorf("render nginx main template: %w", err))
+	}
+	return buf.String()
+}
+
+// buildVlessConf renders cfg.NginxConfig from the embedded template.
+func buildVlessConf(cfg *config.Config) string {
+	var buf bytes.Buffer
+	if err := vlessConfTmpl.Execute(&buf, nginxVlessParams{
+		Domain:      cfg.Domain,
+		NginxPort:   cfg.NginxPort,
+		FallbackURL: cfg.FallbackURL,
+	}); err != nil {
+		panic(fmt.Errorf("render nginx vless template: %w", err))
+	}
+	return buf.String()
+}
+
+// SetupNginxMainConf 生成 Nginx 主配置文件
 func SetupNginxMainConf(cfg *config.Config) error {
-	mainConfPath := "/etc/nginx/nginx.conf"
-
-	// 生成主配置内容
-	// user指令需要用户名和组名两个参数，默认使用nginx:nginx
-	nginxUser := cfg.NginxUser
-	if nginxUser == "" {
-		nginxUser = "root"
-	}
-
-	nginxWorkerProcesses := cfg.NginxWorkerProcesses
-	if nginxWorkerProcesses == "" {
-		nginxWorkerProcesses = "auto"
-	}
-
-	hostIP, err := internal.GetHostIP()
-	if err != nil || hostIP == "" {
-		hostIP = "127.0.0.1"
-		internal.PrintYellow("无法获取公网IP，使用默认值: %s", hostIP)
-	}
-
-	mainConf := fmt.Sprintf(`user %s %s;
-	worker_processes %s;
-	error_log /var/log/nginx/error.log notice;
-	pid /var/run/nginx.pid;
-
-	events {
-	    worker_connections 4096;
-	}
-
-	http {
-	    server_tokens off;
-	    include /etc/nginx/mime.types;
-	    default_type application/octet-stream;
-	    sendfile on;
-	    keepalive_timeout 65;
-
-		server {
-            listen 80;
-            server_name  localhost;
-
-                        #access_log  logs/host.access.log  main;
-
-            location / {
-               root   html;
-               index  index.html index.htm;
-            }
-
-		    if ($host = '%s') {
-                return 403;
-            }
-			error_page   500 502 503 504  /50x.html;
-
-            location = /50x.html {
-                root   html;
-            }
-		}
-
-	    # Include custom configurations
-	    include /etc/nginx/conf.d/*.conf;
-	}
-	`, nginxUser, nginxUser, nginxWorkerProcesses, hostIP)
-	// 写入文件
-	err = internal.WriteFile(mainConfPath, []byte(mainConf), 0644)
-	if err != nil {
+	if err := internal.WriteFile("/etc/nginx/nginx.conf", []byte(buildMainConf(cfg)), 0o644); err != nil {
 		internal.PrintRed("Nginx主配置写入失败: %v", err)
 		return err
 	}
-
-	// 创建网站根目录
-	internal.MkdirIfNotExists("/usr/share/nginx/html", 0755)
-
+	internal.MkdirIfNotExists("/usr/share/nginx/html", 0o755)
 	return nil
 }
 
-// SetupNginxVlessConf 生成Vless回落配置
+// SetupNginxVlessConf 生成 Vless 回落配置
 func SetupNginxVlessConf(cfg *config.Config) error {
 	if cfg.Domain == "" {
 		fmt.Print("请输入域名: ")
 		fmt.Scanln(&cfg.Domain)
 		config.SaveConfig(cfg)
 	}
-
-	// 生成Vless配置内容
-	vlessConf := fmt.Sprintf(`server {
-    listen 80;
-    listen [::]:80;
-    server_name %s;
-
-    location ^~ /.well-known/acme-challenge/ {
-        root /usr/share/nginx/html;
-        default_type "text/plain";
-        allow all;
-    }
-
-    location / {
-        return 301 https://$host$request_uri;
-    }
-}
-
-server {
-    listen 127.0.0.1:%d proxy_protocol;
-    server_name %s;
-
-    set_real_ip_from 127.0.0.1;
-    real_ip_header X-Forwarded-For;
-    real_ip_recursive on;
-
-    add_header Strict-Transport-Security "max-age=63072000" always;
-    root /usr/share/nginx/html;
-
-    error_page 403 %s;
-
-    location / {
-        return 403;
-    }
-}
-`, cfg.Domain, cfg.NginxPort, cfg.Domain, cfg.FallbackURL)
-
-	// 写入文件
-	err := internal.WriteFile(cfg.NginxConfig, []byte(vlessConf), 0644)
-	if err != nil {
+	if err := internal.WriteFile(cfg.NginxConfig, []byte(buildVlessConf(cfg)), 0o644); err != nil {
 		internal.PrintRed("Nginx Vless配置写入失败: %v", err)
 		return err
 	}
-
 	return nil
 }
 
-// SetupNginx 配置Nginx回落
+// SetupNginx 配置 Nginx 回落
 func SetupNginx(cfg *config.Config) error {
 	internal.PrintYellow("正在配置 Nginx 回落模块...")
 
-	// 生成主配置
-	err := SetupNginxMainConf(cfg)
-	if err != nil {
+	if err := SetupNginxMainConf(cfg); err != nil {
+		return err
+	}
+	if err := SetupNginxVlessConf(cfg); err != nil {
 		return err
 	}
 
-	// 生成Vless配置
-	err = SetupNginxVlessConf(cfg)
-	if err != nil {
-		return err
-	}
-
-	// 测试配置
-	_, err = internal.ExecCommandWithSudo("nginx", "-t")
-	if err != nil {
+	if _, err := internal.ExecCommandWithSudo("nginx", "-t"); err != nil {
 		internal.PrintRed("Nginx配置错误: %v", err)
 		return err
 	}
 
-	// 重启Nginx
-	err = internal.RestartService(internal.ServiceNginx)
-	if err != nil {
-		internal.PrintRed("Nginxkt启失败: %v", err)
+	if err := internal.RestartService(internal.ServiceNginx); err != nil {
+		internal.PrintRed("Nginx启动失败: %v", err)
 		return err
 	}
-
-	// 设置开机自启
 	internal.EnableService(internal.ServiceNginx)
 
 	internal.PrintGreen("Nginx配置完成")
 	return nil
 }
 
-// RestartNginx 重启Nginx
+// RestartNginx 重启 Nginx
 func RestartNginx() error {
 	return internal.RestartService(internal.ServiceNginx)
 }
 
-// NginxStatus 获取Nginx运行状态
+// NginxStatus 获取 Nginx 运行状态
 func NginxStatus() string {
 	return internal.ServiceStatus(internal.ServiceNginx)
 }

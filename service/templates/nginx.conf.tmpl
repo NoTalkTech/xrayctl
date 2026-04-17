@@ -1,0 +1,26 @@
+user {{.User}} {{.User}};
+worker_processes {{.WorkerProcesses}};
+error_log /var/log/nginx/error.log notice;
+pid /var/run/nginx.pid;
+
+events {
+    worker_connections 4096;
+}
+
+http {
+    server_tokens off;
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    sendfile on;
+    keepalive_timeout 65;
+
+    # Default server: deny bare-IP access on port 80.
+    server {
+        listen 80 default_server;
+        listen [::]:80 default_server;
+        server_name _;
+        return 444;
+    }
+
+    include /etc/nginx/conf.d/*.conf;
+}
