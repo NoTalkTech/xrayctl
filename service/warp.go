@@ -110,8 +110,9 @@ func RestartWarp(cfg *config.Config) error {
 	return nil
 }
 
-// WarpStatus 获取WARP运行状态
+// WarpStatus 获取WARP运行状态。
+// 返回 systemd 对 warp-svc 的 is-active 状态（与其他服务一致），
+// 调用方应与 internal.StatusActive 比较。
 func WarpStatus() string {
-	output, _ := internal.ExecCommandSilent("warp-cli", "status")
-	return strings.TrimSpace(output)
+	return internal.ServiceStatus(internal.ServiceWarp)
 }
