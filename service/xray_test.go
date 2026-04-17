@@ -98,4 +98,3 @@ func TestGenerateUUIDFromEmailIsValid(t *testing.T) {
 		}
 	}
 }
-
