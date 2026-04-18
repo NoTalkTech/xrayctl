@@ -112,14 +112,12 @@ func SetupXray(cfg *config.Config) error {
 		uuid = oldUUID
 	}
 	if uuid == "" {
-		if cfg.Email != "" {
-			uuid = generateUUIDFromEmail(cfg.Email)
-		} else {
-			uuid = internal.GenerateUUID()
-		}
+		uuid = generateUUIDFromEmail(cfg.Email)
 	}
 	cfg.UUID = uuid
-	config.SaveConfig(cfg)
+	if err := config.SaveConfig(cfg); err != nil {
+		internal.PrintYellow("保存配置失败（UUID 可能未持久化）: %v", err)
+	}
 
 	jsonConfig, err := buildXrayConfigJSON(cfg, uuid)
 	if err != nil {
@@ -132,12 +130,12 @@ func SetupXray(cfg *config.Config) error {
 		return err
 	}
 
-	if _, err := internal.ExecCommandWithSudo("systemctl", "restart", "xray"); err != nil {
+	if _, err := internal.ExecCommandWithSudo("systemctl", "restart", internal.ServiceXray); err != nil {
 		internal.PrintRed("Xray重启失败: %v", err)
 		return err
 	}
 
-	internal.EnableService("xray")
+	internal.EnableService(internal.ServiceXray)
 	internal.PrintGreen("Xray部署成功！UUID: %s", uuid)
 	return nil
 }
@@ -232,11 +230,11 @@ func buildXrayRoutingRules(warpDomains []string) []XrayRoutingRule {
 
 // XrayStatus 获取Xray运行状态
 func XrayStatus() string {
-	return internal.ServiceStatus("xray")
+	return internal.ServiceStatus(internal.ServiceXray)
 }
 
 // generateUUIDFromEmail returns a deterministic RFC 4122 v3-shaped UUID
-// derived from the MD5 of email. Same email → same UUID.
+// derived from the MD5 of email. Empty email falls back to a random UUID.
 func generateUUIDFromEmail(email string) string {
 	if email == "" {
 		return internal.GenerateUUID()
