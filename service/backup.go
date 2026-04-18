@@ -2,7 +2,6 @@ package service
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"xrayctl/config"
@@ -13,10 +12,8 @@ import (
 func Backup(cfg *config.Config) error {
 	internal.PrintYellow("正在备份数据...")
 
-	// 备份文件名：xrayctl-backup-日期.tar.gz
 	backupFile := fmt.Sprintf("xrayctl-backup-%s.tar.gz", time.Now().Format("20060102-150405"))
 
-	// 要备份的路径
 	paths := []string{
 		"/etc/xrayctl/",
 		cfg.CertDir,
@@ -24,7 +21,6 @@ func Backup(cfg *config.Config) error {
 		cfg.NginxConfig,
 	}
 
-	// 过滤不存在的路径
 	var existPaths []string
 	for _, p := range paths {
 		if internal.FileExists(p) || internal.DirExists(p) {
@@ -37,10 +33,10 @@ func Backup(cfg *config.Config) error {
 		return nil
 	}
 
-	// 打包
-	cmd := fmt.Sprintf("tar -zcf %s %s", backupFile, strings.Join(existPaths, " "))
-	_, err := internal.ExecCommand("bash", "-c", cmd)
-	if err != nil {
+	// Build argv directly instead of handing a concatenated command to bash -c,
+	// so shell metacharacters in paths can never be interpreted.
+	args := append([]string{"-zcf", backupFile}, existPaths...)
+	if _, err := internal.ExecCommand("tar", args...); err != nil {
 		internal.PrintRed("备份失败: %v", err)
 		return err
 	}
