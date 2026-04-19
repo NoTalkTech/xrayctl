@@ -122,7 +122,9 @@ func ShowMenu() {
 		case "3":
 			// 重新申请证书
 			service.SetupCert(cfg)
-			exec.Command("systemctl", "restart", "xray").Run()
+			if err := internal.RestartService(internal.ServiceXray); err != nil {
+				internal.PrintYellow("Xray重启失败: %v", err)
+			}
 		case "4":
 			// 重启WARP
 			service.RestartWarp(cfg)

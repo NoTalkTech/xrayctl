@@ -54,20 +54,21 @@ func Restore(backupFile string) error {
 		return fmt.Errorf("backup file not exist")
 	}
 
-	// 停止服务
-	internal.ExecCommandWithSudo("systemctl", "stop", "xray", "nginx")
+	// 停止服务（涵盖恢复目标的所有进程，含 warp-svc，避免恢复后状态错位）
+	services := []string{internal.ServiceXray, internal.ServiceNginx, internal.ServiceWarp}
+	stopArgs := append([]string{"stop"}, services...)
+	startArgs := append([]string{"start"}, services...)
+	internal.ExecCommandWithSudo("systemctl", stopArgs...)
 
 	// 解压到根目录
 	_, err := internal.ExecCommand("tar", "-zxf", backupFile, "-C", "/")
 	if err != nil {
 		internal.PrintRed("恢复失败: %v", err)
-		// 重启服务
-		internal.ExecCommandWithSudo("systemctl", "start", "xray", "nginx")
+		internal.ExecCommandWithSudo("systemctl", startArgs...)
 		return err
 	}
 
-	// 重启服务
-	internal.ExecCommandWithSudo("systemctl", "start", "xray", "nginx", "warp-svc")
+	internal.ExecCommandWithSudo("systemctl", startArgs...)
 
 	internal.PrintGreen("恢复完成，所有服务已重启")
 	return nil
