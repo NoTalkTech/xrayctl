@@ -53,42 +53,9 @@ func ShowMenu() {
 
 		// 服务状态摘要
 		fmt.Println("  服务状态:")
-
-		// Nginx状态
-		nginxStatus := service.NginxStatus()
-		fmt.Print("    Nginx: ")
-		if nginxStatus == internal.StatusActive {
-			fmt.Print(internal.Green + "running" + internal.Reset)
-		} else if nginxStatus == "failed" {
-			fmt.Print(internal.Red + "fail" + internal.Reset)
-		} else {
-			fmt.Print(internal.Yellow + "not started" + internal.Reset)
-		}
-		fmt.Println()
-
-		// Xray状态
-		xrayStatus := service.XrayStatus()
-		fmt.Print("    Xray:  ")
-		if xrayStatus == internal.StatusActive {
-			fmt.Print(internal.Green + "running" + internal.Reset)
-		} else if xrayStatus == "failed" {
-			fmt.Print(internal.Red + "fail" + internal.Reset)
-		} else {
-			fmt.Print(internal.Yellow + "not started" + internal.Reset)
-		}
-		fmt.Println()
-
-		// WARP状态
-		warpStatus := service.WarpStatus()
-		fmt.Print("    WARP:  ")
-		if warpStatus == internal.StatusActive {
-			fmt.Print(internal.Green + "running" + internal.Reset)
-		} else if warpStatus == "failed" {
-			fmt.Print(internal.Red + "fail" + internal.Reset)
-		} else {
-			fmt.Print(internal.Yellow + "not started" + internal.Reset)
-		}
-		fmt.Println()
+		renderServiceStatus("Nginx", service.NginxStatus())
+		renderServiceStatus("Xray ", service.XrayStatus())
+		renderServiceStatus("WARP ", service.WarpStatus())
 
 		internal.PrintGreen("==========================================")
 		fmt.Println("1. 🚀 完整安装 (一键打通全链路)")
@@ -162,6 +129,20 @@ func ShowMenu() {
 
 		fmt.Println("\n按回车键继续...")
 		scanner.Scan()
+	}
+}
+
+// renderServiceStatus prints a colorized one-liner for a single systemd
+// service status, matching the menu header layout.
+func renderServiceStatus(label, status string) {
+	fmt.Printf("    %s: ", label)
+	switch status {
+	case internal.StatusActive:
+		fmt.Println(internal.Green + "running" + internal.Reset)
+	case internal.StatusFailed:
+		fmt.Println(internal.Red + "fail" + internal.Reset)
+	default:
+		fmt.Println(internal.Yellow + "not started" + internal.Reset)
 	}
 }
 
