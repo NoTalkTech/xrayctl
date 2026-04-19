@@ -8,7 +8,7 @@ type Config struct {
 	Email  string `yaml:"email"` // 证书申请用邮箱
 
 	// 路径配置
-	CertDir      string `yaml:"cert_dir" default:"/etc/xray/cert"`
+	CertDir      string `yaml:"cert_dir" default:"/usr/local/etc/xray/cert"`
 	XrayConfig   string `yaml:"xray_config" default:"/usr/local/etc/xray/config.json"`
 	NginxConfDir string `yaml:"nginx_conf_dir" default:"/etc/nginx/conf.d"`
 	NginxConfig  string `yaml:"nginx_config" default:"/etc/nginx/conf.d/vless.conf"`
@@ -20,7 +20,7 @@ type Config struct {
 	NginxPort int `yaml:"nginx_port" default:"8080"`
 
 	// 分流配置
-	RouteDomains []string `yaml:"route_domains_domain"` // 需要走WARP的域名列表
+	RouteDomains []string `yaml:"route_domains"` // 需要走WARP的域名列表
 
 	// 伪装配置
 	FallbackURL  string `yaml:"fallback_url" default:"https://biyuhuang.github.io/WallaceHuangBlog"`
