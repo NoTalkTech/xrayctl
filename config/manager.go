@@ -53,10 +53,10 @@ func LoadConfig() (*Config, error) {
 	return &cfg, nil
 }
 
-// SaveConfig 保存配置到文件
+// SaveConfig 保存配置到文件。
+// 配置含 WARP+ 许可证等敏感字段，所以目录 0700 / 文件 0600，仅 root 可读。
 func SaveConfig(cfg *Config) error {
-	// 确保配置目录存在
-	if err := os.MkdirAll(DefaultConfigDir, 0755); err != nil {
+	if err := os.MkdirAll(DefaultConfigDir, 0o700); err != nil {
 		return err
 	}
 
@@ -65,5 +65,5 @@ func SaveConfig(cfg *Config) error {
 		return err
 	}
 
-	return os.WriteFile(ConfigPath, data, 0644)
+	return os.WriteFile(ConfigPath, data, 0o600)
 }
