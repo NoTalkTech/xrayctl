@@ -8,11 +8,9 @@ type Config struct {
 	Email  string `yaml:"email"` // 证书申请用邮箱
 
 	// 路径配置
-	CertDir      string `yaml:"cert_dir" default:"/usr/local/etc/xray/cert"`
-	XrayConfig   string `yaml:"xray_config" default:"/usr/local/etc/xray/config.json"`
-	NginxConfDir string `yaml:"nginx_conf_dir" default:"/etc/nginx/conf.d"`
-	NginxConfig  string `yaml:"nginx_config" default:"/etc/nginx/conf.d/vless.conf"`
-	LogDir       string `yaml:"log_dir" default:"/var/log/xrayctl"`
+	CertDir     string `yaml:"cert_dir" default:"/usr/local/etc/xray/cert"`
+	XrayConfig  string `yaml:"xray_config" default:"/usr/local/etc/xray/config.json"`
+	NginxConfig string `yaml:"nginx_config" default:"/etc/nginx/conf.d/vless.conf"`
 
 	// 端口配置
 	WARPPort  int `yaml:"warp_port" default:"40000"`
@@ -23,17 +21,11 @@ type Config struct {
 	RouteDomains []string `yaml:"route_domains"` // 需要走WARP的域名列表
 
 	// 伪装配置
-	FallbackURL  string `yaml:"fallback_url" default:"https://biyuhuang.github.io/WallaceHuangBlog"`
-	FallbackPath string `yaml:"fallback_path" default:"/var/www/html"`
+	FallbackURL string `yaml:"fallback_url" default:"https://biyuhuang.github.io/WallaceHuangBlog"`
 
 	// Nginx配置
 	NginxUser            string `yaml:"nginx_user" default:"nginx"`
 	NginxWorkerProcesses string `yaml:"nginx_worker_processes" default:"auto"`
-
-	// WARP配置
-	WARPLicense string `yaml:"warp_license"` // WARP+许可证
-
-	// AdminEmail string `yaml:"admin_email"` // 管理员邮箱
 }
 
 // DefaultConfig 返回默认配置
@@ -42,7 +34,6 @@ func DefaultConfig() *Config {
 		CertDir:     DefaultCertDir,
 		XrayConfig:  DefaultXrayConfigPath,
 		NginxConfig: DefaultNginxConfigPath,
-		LogDir:      DefaultLogDir,
 		WARPPort:    40000,
 		XrayPort:    443,
 		NginxPort:   8080,
