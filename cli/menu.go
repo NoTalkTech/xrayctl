@@ -71,7 +71,12 @@ func ShowMenu() {
 		internal.PrintGreen("==========================================")
 		fmt.Print("选择操作 [0-9]: ")
 
-		scanner.Scan()
+		if !scanner.Scan() {
+			// stdin closed (EOF or read error) — exit instead of spinning.
+			fmt.Println()
+			internal.PrintYellow("输入已结束，退出菜单。")
+			return
+		}
 		opt := strings.TrimSpace(scanner.Text())
 
 		switch opt {
@@ -108,7 +113,11 @@ func ShowMenu() {
 		case "8":
 			// 恢复
 			fmt.Print("请输入备份文件路径: ")
-			scanner.Scan()
+			if !scanner.Scan() {
+				fmt.Println()
+				internal.PrintYellow("输入已结束，退出菜单。")
+				return
+			}
 			backupFile := strings.TrimSpace(scanner.Text())
 			if backupFile != "" {
 				service.Restore(backupFile)
@@ -116,7 +125,11 @@ func ShowMenu() {
 		case "9":
 			// 卸载
 			fmt.Print("确定要卸载所有组件吗？(y/N): ")
-			scanner.Scan()
+			if !scanner.Scan() {
+				fmt.Println()
+				internal.PrintYellow("输入已结束，退出菜单。")
+				return
+			}
 			confirm := strings.ToLower(strings.TrimSpace(scanner.Text()))
 			if confirm == "y" || confirm == "yes" {
 				service.Uninstall()
@@ -128,7 +141,10 @@ func ShowMenu() {
 		}
 
 		fmt.Println("\n按回车键继续...")
-		scanner.Scan()
+		if !scanner.Scan() {
+			internal.PrintYellow("输入已结束，退出菜单。")
+			return
+		}
 	}
 }
 

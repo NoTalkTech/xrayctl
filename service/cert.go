@@ -33,8 +33,20 @@ func validateEmail(s string) error {
 
 // promptValue prompts the user for a value (or confirms the current one),
 // re-prompting until validate accepts the input. A nil validator accepts anything.
+// Exits the process if stdin is closed (e.g. running --install non-interactively
+// without first persisting domain/email) so we fail fast instead of spinning.
 func promptValue(prompt, current string, validate func(string) error) string {
 	reader := bufio.NewReader(os.Stdin)
+
+	readLine := func() string {
+		line, err := reader.ReadString('\n')
+		if err != nil && line == "" {
+			internal.PrintRed("读取输入失败 (stdin 已关闭?): %v", err)
+			internal.PrintRed("非交互运行请先用 --domain/--uuid 写入配置，或在交互模式下补全%s。", prompt)
+			os.Exit(1)
+		}
+		return line
+	}
 
 	accept := func(v string) (string, bool) {
 		if validate == nil {
@@ -51,8 +63,7 @@ func promptValue(prompt, current string, validate func(string) error) string {
 		internal.PrintGreenRaw("当前%s: %s\n", prompt, current)
 		for {
 			fmt.Print("是否使用此值？(Y/N): ")
-			line, _ := reader.ReadString('\n')
-			switch ans := strings.TrimSpace(line); {
+			switch ans := strings.TrimSpace(readLine()); {
 			case ans == "" || strings.EqualFold(ans, "Y"):
 				if v, ok := accept(current); ok {
 					return v
@@ -69,8 +80,7 @@ func promptValue(prompt, current string, validate func(string) error) string {
 
 	for {
 		internal.PrintYellowRaw("请输入%s: ", prompt)
-		line, _ := reader.ReadString('\n')
-		val := strings.TrimSpace(line)
+		val := strings.TrimSpace(readLine())
 		if val == "" {
 			fmt.Println("输入不能为空")
 			continue
