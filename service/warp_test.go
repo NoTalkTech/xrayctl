@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -22,9 +23,20 @@ func TestWarpRPMURL(t *testing.T) {
 		"9": "https://pkg.cloudflareclient.com/pool/cloudflare-warp-el9.x86_64.rpm",
 	}
 	for in, want := range cases {
-		if got := warpRPMURL(in); got != want {
-			t.Errorf("warpRPMURL(%q) = %q, want %q", in, got, want)
+		got, err := warpRPMURL(in, "amd64")
+		if err != nil {
+			t.Errorf("warpRPMURL(%q, amd64): unexpected error %v", in, err)
+			continue
 		}
+		if got != want {
+			t.Errorf("warpRPMURL(%q, amd64) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestWarpRPMURLUnsupportedArch(t *testing.T) {
+	if _, err := warpRPMURL("9", "arm64"); err == nil {
+		t.Error("warpRPMURL(_, arm64) should return error: Cloudflare publishes no aarch64 RPM")
 	}
 }
 
@@ -59,6 +71,9 @@ func (r *recorder) RunWithSudo(_ context.Context, name string, args ...string) (
 // resolved via a separate rpm -E call and the result is embedded into the
 // RPM URL from Go, not from a shell.
 func TestInstallWarpRPMArgv(t *testing.T) {
+	if runtime.GOARCH != "amd64" {
+		t.Skipf("Cloudflare 仅发布 x86_64 RPM；当前 GOARCH=%s 上 installWarpRPM 故意失败，跳过", runtime.GOARCH)
+	}
 	rec := &recorder{reply: map[string]string{"rpm": "9\n"}}
 	orig := internal.DefaultRunner
 	internal.DefaultRunner = rec

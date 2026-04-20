@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -22,9 +23,14 @@ func warpAptRepoLine(codename string) string {
 }
 
 // warpRPMURL builds the download URL for the RHEL-family WARP RPM for the
-// given major RHEL version (e.g. "8", "9").
-func warpRPMURL(rhelVersion string) string {
-	return fmt.Sprintf("https://pkg.cloudflareclient.com/pool/cloudflare-warp-el%s.x86_64.rpm", rhelVersion)
+// given major RHEL version (e.g. "8", "9") and Go arch (e.g. "amd64").
+// Cloudflare only publishes x86_64 RPMs in the public pool, so any other arch
+// is rejected with a clear error rather than silently 404'ing later.
+func warpRPMURL(rhelVersion, goarch string) (string, error) {
+	if goarch != "amd64" {
+		return "", fmt.Errorf("Cloudflare 没有为 %s 架构发布 WARP RPM；请改用 apt 系统或手动安装 warp-cli", goarch)
+	}
+	return fmt.Sprintf("https://pkg.cloudflareclient.com/pool/cloudflare-warp-el%s.x86_64.rpm", rhelVersion), nil
 }
 
 // SetupWarp 安装配置WARP代理
@@ -137,7 +143,12 @@ func installWarpRPM() error {
 		return fmt.Errorf("empty RHEL version from rpm -E %%rhel")
 	}
 
-	if _, err := internal.ExecCommand("rpm", "-ivh", warpRPMURL(rhel)); err != nil {
+	url, err := warpRPMURL(rhel, runtime.GOARCH)
+	if err != nil {
+		internal.PrintRed("%v", err)
+		return err
+	}
+	if _, err := internal.ExecCommand("rpm", "-ivh", url); err != nil {
 		internal.PrintRed("WARP安装失败: %v", err)
 		return err
 	}
