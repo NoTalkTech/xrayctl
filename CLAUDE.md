@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `xrayctl` is a single-binary Go CLI (Go 1.21, sole runtime dep `gopkg.in/yaml.v3`) that installs and manages a Xray + Nginx + Cloudflare WARP stack on Linux. It produces a VLESS + XTLS-Vision server with AI-site traffic selectively routed through a WARP SOCKS outbound.
 
-Target runtime: Linux amd64/arm64, **as root**. Most `service/*` code shells out to `systemctl`, `apt`/`yum`/`dnf`, `warp-cli`, `nginx`, `acme.sh`, and the Xray installer — so tests and local dev on non-Linux hosts can only exercise pure-Go logic (config, helpers, JSON/YAML generation).
+Target runtime: Linux amd64/arm64, **as root**. Most `service/*` code shells out to `systemctl`, `apt`/`yum`/`dnf`, `warp-cli`, `nginx`, `acme.sh`, and the Xray installer — so tests and local dev on non-Linux hosts can only exercise pure-Go logic (config, helpers, JSON/YAML generation). Note: Cloudflare publishes WARP RPMs for `x86_64` only, so on RHEL-family arm64 hosts `installWarpRPM` returns an explicit error rather than 404'ing inside `rpm`. Debian/Ubuntu apt covers both arches.
 
 ## Common commands
 
@@ -66,8 +66,8 @@ The install pipeline (menu option 1 and `--install`) is a fixed sequence and ord
 - **Language of user-facing strings is Chinese.** Preserve it when editing existing prints; new prints should match the surrounding file.
 - Import grouping is enforced by `gci`/`goimports` with `local-prefixes: xrayctl` — stdlib, third-party, then `xrayctl/...`.
 - `.golangci.yml` is strict (funlen 100 lines / 50 stmts, gocyclo 15, many linters enabled). Before pushing, run `golangci-lint run` — CI fails the whole pipeline (lint → test → build) on any lint error.
-- There are `service/*.go.bak*` files in the tree. They are dead code kept by the author; do not edit them and do not copy their patterns.
-- Tests in `service/xray_test.go` declare a local anonymous `XrayConfig` struct for round-tripping JSON; production code in `service/xray.go` builds JSON via `strings.Builder`. The two are intentionally independent — do not try to unify them without a real refactor.
+- `service/xray.go` exports a typed `XrayConfig` struct and emits configs via `json.MarshalIndent`; `service/xray_test.go` round-trips JSON back into the same `XrayConfig` type. Add new fields to the shared struct, not via a parallel definition.
+- `config.SaveConfig` writes via tmp + `os.Rename` so a crash mid-save can never leave a truncated yaml on disk. Anything new that persists state should follow the same pattern.
 
 ## CI / branching
 
