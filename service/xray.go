@@ -125,7 +125,10 @@ func SetupXray(cfg *config.Config) error {
 		return err
 	}
 
-	if err := internal.WriteFile(cfg.XrayConfig, []byte(jsonConfig), 0o644); err != nil {
+	// 0o600: config embeds the VLESS UUID (effectively a credential), and Xray
+	// runs as root (upstream install-release.sh default), so no other reader
+	// needs access. Mirrors xray.key's 0o600 root:root in cfg.CertDir.
+	if err := internal.WriteFile(cfg.XrayConfig, []byte(jsonConfig), 0o600); err != nil {
 		internal.PrintRed("写入Xray配置失败: %v", err)
 		return err
 	}
