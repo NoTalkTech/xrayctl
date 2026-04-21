@@ -125,9 +125,10 @@ func SetupXray(cfg *config.Config) error {
 		return err
 	}
 
-	// 0o600: config embeds the VLESS UUID (effectively a credential), and Xray
-	// runs as root (upstream install-release.sh default), so no other reader
-	// needs access. Mirrors xray.key's 0o600 root:root in cfg.CertDir.
+	// 0o600: config embeds the VLESS UUID (effectively a credential). This
+	// project already assumes Xray runs as root — cert.go chmods xray.key
+	// to 0o600 root:root, which would otherwise be unreadable to a nobody
+	// worker — so locking the config the same way adds no new constraint.
 	if err := internal.WriteFile(cfg.XrayConfig, []byte(jsonConfig), 0o600); err != nil {
 		internal.PrintRed("写入Xray配置失败: %v", err)
 		return err
