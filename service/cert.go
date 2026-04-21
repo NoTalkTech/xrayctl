@@ -33,19 +33,31 @@ func validateEmail(s string) error {
 
 // promptValue prompts the user for a value (or confirms the current one),
 // re-prompting until validate accepts the input. A nil validator accepts anything.
-// Exits the process if stdin is closed (e.g. running --install non-interactively
-// without first persisting domain/email) so we fail fast instead of spinning.
+//
+// On closed stdin (non-interactive run with no pipe) behavior splits by branch:
+//   - If current is already set, EOF is treated as an accept of that value —
+//     this preserves the old non-interactive workflow where --install works
+//     as long as domain/email are already persisted.
+//   - If current is empty or invalid and we fall through to manual entry,
+//     EOF is fatal; we can't invent a value.
 func promptValue(prompt, current string, validate func(string) error) string {
 	reader := bufio.NewReader(os.Stdin)
 
-	readLine := func() string {
+	// readLine returns (trimmed line, ok). ok=false means stdin is closed
+	// and no more input will ever arrive; callers decide whether that's
+	// acceptable in their branch.
+	readLine := func() (string, bool) {
 		line, err := reader.ReadString('\n')
 		if err != nil && line == "" {
-			internal.PrintRed("读取输入失败 (stdin 已关闭?): %v", err)
-			internal.PrintRed("非交互运行请先用 --domain/--uuid 写入配置，或在交互模式下补全%s。", prompt)
-			os.Exit(1)
+			return "", false
 		}
-		return line
+		return strings.TrimSpace(line), true
+	}
+
+	exitNoInput := func() {
+		internal.PrintRed("读取输入失败 (stdin 已关闭?)")
+		internal.PrintRed("请在交互模式下补全%s，或直接编辑 %s 后重试。", prompt, config.DefaultConfigPath)
+		os.Exit(1)
 	}
 
 	accept := func(v string) (string, bool) {
@@ -63,9 +75,18 @@ func promptValue(prompt, current string, validate func(string) error) string {
 		internal.PrintGreenRaw("当前%s: %s\n", prompt, current)
 		for {
 			fmt.Print("是否使用此值？(Y/N): ")
-			switch ans := strings.TrimSpace(readLine()); {
+			ans, ok := readLine()
+			if !ok {
+				// Non-interactive run: treat as implicit "Y" and try current.
+				// If current is valid we're done; if not, we can't recover.
+				if v, aok := accept(current); aok {
+					return v
+				}
+				exitNoInput()
+			}
+			switch {
 			case ans == "" || strings.EqualFold(ans, "Y"):
-				if v, ok := accept(current); ok {
+				if v, aok := accept(current); aok {
 					return v
 				}
 				// invalid: fall through to manual entry
@@ -80,12 +101,15 @@ func promptValue(prompt, current string, validate func(string) error) string {
 
 	for {
 		internal.PrintYellowRaw("请输入%s: ", prompt)
-		val := strings.TrimSpace(readLine())
+		val, ok := readLine()
+		if !ok {
+			exitNoInput()
+		}
 		if val == "" {
 			fmt.Println("输入不能为空")
 			continue
 		}
-		if v, ok := accept(val); ok {
+		if v, aok := accept(val); aok {
 			return v
 		}
 	}
