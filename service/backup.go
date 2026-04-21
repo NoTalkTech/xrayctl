@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"xrayctl/config"
@@ -39,6 +40,13 @@ func Backup(cfg *config.Config) error {
 	if _, err := internal.ExecCommand("tar", args...); err != nil {
 		internal.PrintRed("备份失败: %v", err)
 		return err
+	}
+
+	// The tarball contains the 0o600 TLS key and the UUID-bearing Xray config;
+	// tar writes with the process umask (typically 0o022 → 0o644), so clamp it
+	// down explicitly before anyone else on the host can read it.
+	if err := os.Chmod(backupFile, 0o600); err != nil {
+		internal.PrintYellow("备份文件权限收紧失败: %v", err)
 	}
 
 	internal.PrintGreen("备份成功，文件: %s", backupFile)
