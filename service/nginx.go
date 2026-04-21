@@ -73,9 +73,12 @@ func SetupNginxMainConf(cfg *config.Config) error {
 // SetupNginxVlessConf 生成 Vless 回落配置
 func SetupNginxVlessConf(cfg *config.Config) error {
 	if cfg.Domain == "" {
-		fmt.Print("请输入域名: ")
-		fmt.Scanln(&cfg.Domain)
-		config.SaveConfig(cfg)
+		// Reuse the shared prompt helper so we get EOF-safe behavior and
+		// domain validation instead of fmt.Scanln spinning on closed stdin.
+		cfg.Domain = promptValue("域名", "", validateDomain)
+		if err := config.SaveConfig(cfg); err != nil {
+			internal.PrintYellow("保存配置失败: %v", err)
+		}
 	}
 	if err := internal.WriteFile(cfg.NginxConfig, []byte(buildVlessConf(cfg)), 0o644); err != nil {
 		internal.PrintRed("Nginx Vless配置写入失败: %v", err)
