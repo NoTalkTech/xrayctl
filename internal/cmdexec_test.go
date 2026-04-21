@@ -31,6 +31,23 @@ func TestExecCommand(t *testing.T) {
 	}
 }
 
+// TestRunSilentReturnsStdoutOnNonZeroExit pins the contract that status
+// probes rely on: systemctl-style tools emit their answer on stdout while
+// exiting non-zero (exit 3 = inactive/failed). If RunSilent dropped stdout
+// on error — as it used to — ServiceStatus would flatten "failed" into "".
+func TestRunSilentReturnsStdoutOnNonZeroExit(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("sh-specific")
+	}
+	out, err := realRunner{}.RunSilent(context.Background(), "sh", "-c", "echo failed; exit 3")
+	if err == nil {
+		t.Errorf("expected non-nil error for exit 3, got nil")
+	}
+	if out != "failed\n" {
+		t.Errorf("stdout = %q, want %q (must survive non-zero exit)", out, "failed\n")
+	}
+}
+
 // fakeRunner records every call and returns canned responses.
 type fakeRunner struct {
 	calls [][]string

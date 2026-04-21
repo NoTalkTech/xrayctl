@@ -17,8 +17,10 @@ type CommandRunner interface {
 	// failure. Progress is logged via the [CMD]/[STDOUT]/[STDERR] prefixes.
 	Run(ctx context.Context, name string, args ...string) (string, error)
 
-	// RunSilent is like Run but without logging — use for status probes
-	// whose output is handled by the caller.
+	// RunSilent is like Run but without logging. Unlike Run, it always
+	// returns stdout regardless of exit code — callers typically invoke
+	// tools like `systemctl is-active` that communicate their answer on
+	// stdout and exit non-zero as a side channel (3 = inactive/failed).
 	RunSilent(ctx context.Context, name string, args ...string) (string, error)
 
 	// RunWithSudo executes name with args, prefixing `sudo` when the current
@@ -61,13 +63,15 @@ func (realRunner) Run(ctx context.Context, name string, args ...string) (string,
 
 func (realRunner) RunSilent(ctx context.Context, name string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
-	var stdout, stderr bytes.Buffer
+	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return stderr.String(), err
-	}
-	return stdout.String(), nil
+	// Always return stdout, even on non-zero exit. systemctl-style tools
+	// emit the useful answer (e.g. "inactive", "failed") on stdout and use
+	// the exit code as a side channel; dropping stdout would flatten every
+	// non-active status to "". Stderr is intentionally discarded here —
+	// callers that need it should use Run instead.
+	err := cmd.Run()
+	return stdout.String(), err
 }
 
 func (r realRunner) RunWithSudo(ctx context.Context, name string, args ...string) (string, error) {
