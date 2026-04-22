@@ -12,7 +12,4 @@ const (
 
 	// Nginx相关
 	DefaultNginxConfigPath = "/etc/nginx/conf.d/vless.conf"
-
-	// 日志相关
-	DefaultLogDir = "/var/log/xrayctl"
 )

@@ -15,6 +15,7 @@ const (
 	// 服务状态
 	StatusActive    = "active"
 	StatusInactive  = "inactive"
+	StatusFailed    = "failed"
 	StatusConnected = "Connected"
 
 	// 协议常量

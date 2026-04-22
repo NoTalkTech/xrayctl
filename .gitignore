@@ -1,7 +1,17 @@
+# Binaries
+/xrayctl
+/xrayctl-*
+*.exe
+
+# Backups / editor debris
+*.bak
+*.bak[0-9]*
+
+# Coverage
+coverage.out
+
+# Editor / assistant caches
 .claude/
 .cursor/
-
-xrayctl-linux
-CLAUDE.md
-xrayctl
-xrayctl
+.vscode/
+.idea/

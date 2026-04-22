@@ -2,7 +2,7 @@ package service
 
 import (
 	"fmt"
-	"strings"
+	"os"
 	"time"
 
 	"xrayctl/config"
@@ -13,10 +13,8 @@ import (
 func Backup(cfg *config.Config) error {
 	internal.PrintYellow("正在备份数据...")
 
-	// 备份文件名：xrayctl-backup-日期.tar.gz
 	backupFile := fmt.Sprintf("xrayctl-backup-%s.tar.gz", time.Now().Format("20060102-150405"))
 
-	// 要备份的路径
 	paths := []string{
 		"/etc/xrayctl/",
 		cfg.CertDir,
@@ -24,7 +22,6 @@ func Backup(cfg *config.Config) error {
 		cfg.NginxConfig,
 	}
 
-	// 过滤不存在的路径
 	var existPaths []string
 	for _, p := range paths {
 		if internal.FileExists(p) || internal.DirExists(p) {
@@ -37,12 +34,19 @@ func Backup(cfg *config.Config) error {
 		return nil
 	}
 
-	// 打包
-	cmd := fmt.Sprintf("tar -zcf %s %s", backupFile, strings.Join(existPaths, " "))
-	_, err := internal.ExecCommand("bash", "-c", cmd)
-	if err != nil {
+	// Build argv directly instead of handing a concatenated command to bash -c,
+	// so shell metacharacters in paths can never be interpreted.
+	args := append([]string{"-zcf", backupFile}, existPaths...)
+	if _, err := internal.ExecCommand("tar", args...); err != nil {
 		internal.PrintRed("备份失败: %v", err)
 		return err
+	}
+
+	// The tarball contains the 0o600 TLS key and the UUID-bearing Xray config;
+	// tar writes with the process umask (typically 0o022 → 0o644), so clamp it
+	// down explicitly before anyone else on the host can read it.
+	if err := os.Chmod(backupFile, 0o600); err != nil {
+		internal.PrintYellow("备份文件权限收紧失败: %v", err)
 	}
 
 	internal.PrintGreen("备份成功，文件: %s", backupFile)
@@ -58,20 +62,21 @@ func Restore(backupFile string) error {
 		return fmt.Errorf("backup file not exist")
 	}
 
-	// 停止服务
-	internal.ExecCommandWithSudo("systemctl", "stop", "xray", "nginx")
+	// 停止服务（涵盖恢复目标的所有进程，含 warp-svc，避免恢复后状态错位）
+	services := []string{internal.ServiceXray, internal.ServiceNginx, internal.ServiceWarp}
+	stopArgs := append([]string{"stop"}, services...)
+	startArgs := append([]string{"start"}, services...)
+	internal.ExecCommandWithSudo("systemctl", stopArgs...)
 
 	// 解压到根目录
 	_, err := internal.ExecCommand("tar", "-zxf", backupFile, "-C", "/")
 	if err != nil {
 		internal.PrintRed("恢复失败: %v", err)
-		// 重启服务
-		internal.ExecCommandWithSudo("systemctl", "start", "xray", "nginx")
+		internal.ExecCommandWithSudo("systemctl", startArgs...)
 		return err
 	}
 
-	// 重启服务
-	internal.ExecCommandWithSudo("systemctl", "start", "xray", "nginx", "warp-svc")
+	internal.ExecCommandWithSudo("systemctl", startArgs...)
 
 	internal.PrintGreen("恢复完成，所有服务已重启")
 	return nil

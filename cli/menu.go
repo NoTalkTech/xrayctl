@@ -53,42 +53,9 @@ func ShowMenu() {
 
 		// 服务状态摘要
 		fmt.Println("  服务状态:")
-
-		// Nginx状态
-		nginxStatus := service.NginxStatus()
-		fmt.Print("    Nginx: ")
-		if nginxStatus == internal.StatusActive {
-			fmt.Print(internal.Green + "running" + internal.Reset)
-		} else if nginxStatus == "failed" {
-			fmt.Print(internal.Red + "fail" + internal.Reset)
-		} else {
-			fmt.Print(internal.Yellow + "not started" + internal.Reset)
-		}
-		fmt.Println()
-
-		// Xray状态
-		xrayStatus := service.XrayStatus()
-		fmt.Print("    Xray:  ")
-		if xrayStatus == internal.StatusActive {
-			fmt.Print(internal.Green + "running" + internal.Reset)
-		} else if xrayStatus == "failed" {
-			fmt.Print(internal.Red + "fail" + internal.Reset)
-		} else {
-			fmt.Print(internal.Yellow + "not started" + internal.Reset)
-		}
-		fmt.Println()
-
-		// WARP状态
-		warpStatus := service.WarpStatus()
-		fmt.Print("    WARP:  ")
-		if warpStatus == internal.StatusActive {
-			fmt.Print(internal.Green + "running" + internal.Reset)
-		} else if warpStatus == "failed" {
-			fmt.Print(internal.Red + "fail" + internal.Reset)
-		} else {
-			fmt.Print(internal.Yellow + "not started" + internal.Reset)
-		}
-		fmt.Println()
+		renderServiceStatus("Nginx", service.NginxStatus())
+		renderServiceStatus("Xray ", service.XrayStatus())
+		renderServiceStatus("WARP ", service.WarpStatus())
 
 		internal.PrintGreen("==========================================")
 		fmt.Println("1. 🚀 完整安装 (一键打通全链路)")
@@ -104,7 +71,12 @@ func ShowMenu() {
 		internal.PrintGreen("==========================================")
 		fmt.Print("选择操作 [0-9]: ")
 
-		scanner.Scan()
+		if !scanner.Scan() {
+			// stdin closed (EOF or read error) — exit instead of spinning.
+			fmt.Println()
+			internal.PrintYellow("输入已结束，退出菜单。")
+			return
+		}
 		opt := strings.TrimSpace(scanner.Text())
 
 		switch opt {
@@ -122,7 +94,9 @@ func ShowMenu() {
 		case "3":
 			// 重新申请证书
 			service.SetupCert(cfg)
-			exec.Command("systemctl", "restart", "xray").Run()
+			if err := internal.RestartService(internal.ServiceXray); err != nil {
+				internal.PrintYellow("Xray重启失败: %v", err)
+			}
 		case "4":
 			// 重启WARP
 			service.RestartWarp(cfg)
@@ -139,7 +113,11 @@ func ShowMenu() {
 		case "8":
 			// 恢复
 			fmt.Print("请输入备份文件路径: ")
-			scanner.Scan()
+			if !scanner.Scan() {
+				fmt.Println()
+				internal.PrintYellow("输入已结束，退出菜单。")
+				return
+			}
 			backupFile := strings.TrimSpace(scanner.Text())
 			if backupFile != "" {
 				service.Restore(backupFile)
@@ -147,7 +125,11 @@ func ShowMenu() {
 		case "9":
 			// 卸载
 			fmt.Print("确定要卸载所有组件吗？(y/N): ")
-			scanner.Scan()
+			if !scanner.Scan() {
+				fmt.Println()
+				internal.PrintYellow("输入已结束，退出菜单。")
+				return
+			}
 			confirm := strings.ToLower(strings.TrimSpace(scanner.Text()))
 			if confirm == "y" || confirm == "yes" {
 				service.Uninstall()
@@ -159,7 +141,24 @@ func ShowMenu() {
 		}
 
 		fmt.Println("\n按回车键继续...")
-		scanner.Scan()
+		if !scanner.Scan() {
+			internal.PrintYellow("输入已结束，退出菜单。")
+			return
+		}
+	}
+}
+
+// renderServiceStatus prints a colorized one-liner for a single systemd
+// service status, matching the menu header layout.
+func renderServiceStatus(label, status string) {
+	fmt.Printf("    %s: ", label)
+	switch status {
+	case internal.StatusActive:
+		fmt.Println(internal.Green + "running" + internal.Reset)
+	case internal.StatusFailed:
+		fmt.Println(internal.Red + "fail" + internal.Reset)
+	default:
+		fmt.Println(internal.Yellow + "not started" + internal.Reset)
 	}
 }
 

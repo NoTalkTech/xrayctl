@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 )
 
@@ -57,44 +56,4 @@ func GetWarpIP(port int) (string, error) {
 func PortOpen(port int) bool {
 	_, err := portCheckClient.Get(fmt.Sprintf("http://127.0.0.1:%d", port))
 	return err == nil
-}
-
-// GetHostIP 获取主机公网IP，尝试多个查询服务
-func GetHostIP() (string, error) {
-	// 尝试的服务列表
-	services := []string{
-		"https://ifconfig.me/ip",
-		"https://api.ipify.org",
-		"https://checkip.amazonaws.com",
-		"https://ipinfo.io/ip",
-	}
-
-	// 为每个请求创建带超时的客户端
-	client := &http.Client{
-		Timeout: 5 * time.Second,
-	}
-
-	var lastErr error
-	for _, service := range services {
-		resp, err := client.Get(service)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-
-		ip, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			lastErr = err
-			continue
-		}
-
-		ipStr := strings.TrimSpace(string(ip))
-		// 验证IP格式（简单验证）
-		if ipStr != "" && (strings.Contains(ipStr, ".") || strings.Contains(ipStr, ":")) {
-			return ipStr, nil
-		}
-	}
-
-	return "", fmt.Errorf("所有IP查询服务都失败，最后一个错误: %v", lastErr)
 }

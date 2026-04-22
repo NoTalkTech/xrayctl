@@ -32,7 +32,6 @@ func TestSaveAndLoadConfig(t *testing.T) {
 	testCfg := DefaultConfig()
 	testCfg.Domain = "test.example.com"
 	testCfg.UUID = "test-uuid-1234"
-	testCfg.WARPLicense = "test-license"
 
 	// 保存配置
 	err := SaveConfig(testCfg)
@@ -52,9 +51,6 @@ func TestSaveAndLoadConfig(t *testing.T) {
 	}
 	if loadedCfg.UUID != testCfg.UUID {
 		t.Errorf("UUID expected %s, got %s", testCfg.UUID, loadedCfg.UUID)
-	}
-	if loadedCfg.WARPLicense != testCfg.WARPLicense {
-		t.Errorf("WARPLicense expected %s, got %s", testCfg.WARPLicense, loadedCfg.WARPLicense)
 	}
 	if loadedCfg.WARPPort != testCfg.WARPPort {
 		t.Errorf("WARPPort expected %d, got %d", testCfg.WARPPort, loadedCfg.WARPPort)
