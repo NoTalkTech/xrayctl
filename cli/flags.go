@@ -16,6 +16,7 @@ func ParseFlags() bool {
 		install     = flag.Bool("install", false, "一键完整安装所有组件")
 		domain      = flag.String("domain", "", "指定域名")
 		uuid        = flag.String("uuid", "", "指定UUID")
+		email       = flag.String("email", "", "指定证书申请邮箱 (acme.sh 注册用)")
 		status      = flag.Bool("status", false, "查看运行状态")
 		restartWarp = flag.Bool("restart-warp", false, "重启WARP代理")
 		updateXray  = flag.Bool("update-xray", false, "更新Xray核心")
@@ -77,13 +78,17 @@ func ParseFlags() bool {
 		cfg.UUID = *uuid
 		dirty = true
 	}
+	if *email != "" && *email != cfg.Email {
+		cfg.Email = *email
+		dirty = true
+	}
 	if dirty {
 		if err := config.SaveConfig(cfg); err != nil {
 			internal.PrintYellow("保存配置失败: %v", err)
 		}
 	}
 
-	// 无动作 flag：只是做了 --domain/--uuid 的配置覆盖
+	// 无动作 flag：只是做了 --domain/--uuid/--email 的配置覆盖
 	if len(chosen) == 0 {
 		if dirty {
 			internal.PrintGreen("配置已更新")

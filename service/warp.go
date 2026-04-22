@@ -49,10 +49,17 @@ func SetupWarp(cfg *config.Config) error {
 		time.Sleep(3 * time.Second)
 	}
 
-	// Registration prompts Y/N on a tty, so we feed stdin through `script`.
-	// A second-registration error is expected and safely ignored.
+	// `warp-cli registration new` prompts Y/N on a TTY to accept TOS; piping
+	// "y" into it directly doesn't work because warp-cli refuses to read
+	// from a non-terminal. `script -q` wraps the invocation in a fake pty
+	// so the echo goes through. If upstream adds a flag like --accept-tos,
+	// replace this with the proper non-interactive form.
+	//
+	// We don't error out on a non-zero exit: the common case is "already
+	// registered" which returns non-zero, and the next mandatory step
+	// (`warp-cli mode proxy`) will surface any real problem.
 	if _, err := internal.ExecCommand("sh", "-c", `echo "y" | script -q -c "warp-cli registration new" /dev/null 2>&1`); err != nil {
-		internal.PrintYellow("WARP已注册，跳过注册步骤")
+		internal.PrintYellow("WARP 注册步骤跳过 (已注册或暂时失败，后续命令会再验证)")
 	}
 
 	if _, err := internal.ExecCommand("warp-cli", "mode", "proxy"); err != nil {

@@ -30,8 +30,12 @@ chmod +x xrayctl
 
 #### 非交互式模式（适合自动化部署）
 ```bash
-./xrayctl --install --domain your-domain.com
+# 首次安装需要域名 + 证书申请邮箱；脚本化场景可以 < /dev/null 彻底切断 stdin
+./xrayctl --install --domain your-domain.com --email you@example.com
 ```
+
+> 配置持久化在 `/etc/xrayctl/config.yaml`，后续调用 `--install`/`--renew-cert`
+> 这类动作时可以省略 `--domain`/`--email`，xrayctl 会直接复用已保存的值。
 
 ## 📖 使用说明
 ### 命令行参数
@@ -39,6 +43,7 @@ chmod +x xrayctl
 # 一键安装
 --install               完整安装所有组件
 --domain string         指定域名
+--email string          指定证书申请邮箱（acme.sh 注册用）
 --uuid string           指定UUID（可选，自动生成）
 
 # 运维操作
