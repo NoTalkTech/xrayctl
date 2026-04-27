@@ -26,7 +26,11 @@ jobs:
 
     - name: Install golangci-lint
       run: |
-        curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.60.0
+        # Pin to v1.60.3: golangci-lint v1.60.0's release artifact was
+        # removed upstream (the v1.60.0 tarball now 404s on GitHub
+        # releases). v1.60.3 is the next patch on the same minor and
+        # uses the same v1 config schema, so .golangci.yml is unchanged.
+        curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.60.3
 
     - name: Run golangci-lint
       run: golangci-lint run --timeout 5m ./...
