@@ -2,27 +2,15 @@
 
 **一台 VPS、一个 Go 二进制，自动把 ChatGPT / Claude / Grok 这类 AI 站点的流量切到 Cloudflare WARP 出口，其余流量原路直连。**
 
-VPS 部署的代理工具里，bash 脚本占了绝大多数。xrayctl 走另一条路：所有逻辑都在一个**约 8 MB 的 Go 单二进制**里，源代码可读、可 review、可单元测试，没有几百行的 `curl | bash` 黑盒。
-
-## ✨ 它做什么
-
-- 🌍 **AI 站点精准分流**：ChatGPT / OpenAI / Claude / X / Grok / Bing 等域名走 Cloudflare WARP SOCKS 出口，其它流量直连。规则是 YAML 列表，随时改。
-- 📦 **单 Go 二进制**：扔到 VPS 上 `./xrayctl` 就能跑，不依赖外部 bash 脚本、不依赖 Python 运行时、不依赖第三方包管理。
-- 🤖 **真正的非交互部署**：`./xrayctl --install --domain x --email y < /dev/null` 在脚本/CI 里能跑通，不会因为缺少 stdin 卡住。
-- 🎫 **证书 + 服务全自动**：acme.sh 申请 / 续签 Let's Encrypt 证书，nginx 回落，warp-cli 注册并设代理，xray 安装并起来。
-- 💾 **备份恢复**：tar 打包配置 + 证书（自动 0o600），换机器解压后服务可继续。
-- 🖥️ **双 UI 同源**：交互式菜单和 `--flags` 命令行共用同一套 service 层，不会出现"菜单里能干、CLI 里不能干"的割裂。
-- 📜 **配置持久化**：`/etc/xrayctl/config.yaml`，原子写入，崩溃不会留半成品。
-
-底层栈是 **VLESS + XTLS-Vision + 真 TLS + Nginx fallback** —— 这是 2022 年起就稳定的方案，足够日常使用，但**不是抗主动探测最强的选择**。如果你的威胁模型是高强度审查，建议看 Reality / Hysteria2 类的方案（见下方"它不做什么"）。
-
-## 🚫 它不做什么
-
-为了把"在一台 VPS 上跑稳"这件事做好，xrayctl 主动放弃了几类功能：
-
-- ❌ **不是多用户面板**。一台机器一个 VLESS client。需要发卡、按用户限流、Web 管理界面，请用 [3x-ui](https://github.com/MHSanaei/3x-ui) / [Marzban](https://github.com/Gozargah/Marzban) / [Hiddify](https://github.com/hiddify/hiddify-config)。
-- ❌ **不是多协议管理器**。当前只支持 VLESS + XTLS-Vision 一种 inbound。需要 Reality / Hysteria2 / TUIC / NaiveProxy 共存的，请用 [v2ray-agent](https://github.com/mack-a/v2ray-agent) / [vless-all-in-one](https://github.com/Chil30/vless-all-in-one)。
-- ❌ **不替换 Xray / Nginx / acme.sh / warp-cli**。它是这几个工具的**编排器**，不是替代品。
+## ✨ 功能特性
+- 🚀 **单二进制无依赖**：仅8MB大小，无需预装任何依赖，扔到服务器直接运行
+- 🔒 **安全协议**：VLESS + XTLS-Vision 加密协议，性能强、安全性高
+- 🌍 **智能分流**：ChatGPT/OpenAI/Claude/X/Grok等AI站点自动走WARP出口，其余流量直连
+- 📜 **配置持久化**：所有配置保存在YAML文件，修改无需改代码
+- 🎫 **证书自动管理**：acme.sh自动申请/续签SSL证书，无需人工干预
+- 💾 **备份恢复**：一键备份/恢复所有配置、证书、密钥，重装系统快速迁移
+- 🖥️ **双模式支持**：交互式菜单 + 非交互命令行，适合手动操作和自动化部署
+- 🌐 **多系统兼容**：支持Debian 11+/Ubuntu 20.04+/CentOS Stream 8+
 
 ## 🚀 快速开始
 
