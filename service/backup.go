@@ -1,3 +1,5 @@
+// Package service implements the installation and management logic for Xray,
+// Nginx, Cloudflare WARP, and related system services.
 package service
 
 import (
@@ -9,7 +11,7 @@ import (
 	"xrayctl/internal"
 )
 
-// Backup 备份所有配置和证书
+// Backup 备份所有配置和证书.
 func Backup(cfg *config.Config) error {
 	internal.PrintYellow("正在备份数据...")
 
@@ -22,7 +24,9 @@ func Backup(cfg *config.Config) error {
 		cfg.NginxConfig,
 	}
 
+	// Collect existing paths to back up.
 	var existPaths []string
+
 	for _, p := range paths {
 		if internal.FileExists(p) || internal.DirExists(p) {
 			existPaths = append(existPaths, p)
@@ -50,10 +54,11 @@ func Backup(cfg *config.Config) error {
 	}
 
 	internal.PrintGreen("备份成功，文件: %s", backupFile)
+
 	return nil
 }
 
-// Restore 从备份文件恢复
+// Restore 从备份文件恢复.
 func Restore(backupFile string) error {
 	internal.PrintYellow("正在从 %s 恢复...", backupFile)
 
@@ -66,18 +71,28 @@ func Restore(backupFile string) error {
 	services := []string{internal.ServiceXray, internal.ServiceNginx, internal.ServiceWarp}
 	stopArgs := append([]string{"stop"}, services...)
 	startArgs := append([]string{"start"}, services...)
-	internal.ExecCommandWithSudo("systemctl", stopArgs...)
+
+	if _, err := internal.ExecCommandWithSudo("systemctl", stopArgs...); err != nil {
+		internal.PrintYellow("停止服务失败: %v", err)
+	}
 
 	// 解压到根目录
 	_, err := internal.ExecCommand("tar", "-zxf", backupFile, "-C", "/")
 	if err != nil {
 		internal.PrintRed("恢复失败: %v", err)
-		internal.ExecCommandWithSudo("systemctl", startArgs...)
+
+		if _, restartErr := internal.ExecCommandWithSudo("systemctl", startArgs...); restartErr != nil {
+			internal.PrintYellow("重启服务失败: %v", restartErr)
+		}
+
 		return err
 	}
 
-	internal.ExecCommandWithSudo("systemctl", startArgs...)
+	if _, err := internal.ExecCommandWithSudo("systemctl", startArgs...); err != nil {
+		internal.PrintYellow("重启服务失败: %v", err)
+	}
 
 	internal.PrintGreen("恢复完成，所有服务已重启")
+
 	return nil
 }

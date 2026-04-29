@@ -1,3 +1,4 @@
+// Package internal 提供网络工具、命令执行、系统服务管理等共享功能.
 package internal
 
 import (
@@ -42,9 +43,11 @@ func (realRunner) Run(ctx context.Context, name string, args ...string) (string,
 	cmd.Stderr = &stderr
 
 	fmt.Printf("[CMD] %s", name)
+
 	for _, arg := range args {
 		fmt.Printf(" %s", arg)
 	}
+
 	fmt.Println()
 
 	err := cmd.Run()
@@ -52,12 +55,15 @@ func (realRunner) Run(ctx context.Context, name string, args ...string) (string,
 	if stdout.Len() > 0 {
 		fmt.Printf("[STDOUT] %s\n", stdout.String())
 	}
+
 	if err != nil {
 		if stderr.Len() > 0 {
 			fmt.Printf("[STDERR] %s\n", stderr.String())
 		}
+
 		return stderr.String(), err
 	}
+
 	return stdout.String(), nil
 }
 
@@ -71,6 +77,7 @@ func (realRunner) RunSilent(ctx context.Context, name string, args ...string) (s
 	// non-active status to "". Stderr is intentionally discarded here —
 	// callers that need it should use Run instead.
 	err := cmd.Run()
+
 	return stdout.String(), err
 }
 
@@ -78,7 +85,9 @@ func (r realRunner) RunWithSudo(ctx context.Context, name string, args ...string
 	if IsRoot() {
 		return r.Run(ctx, name, args...)
 	}
+
 	full := append([]string{name}, args...)
+
 	return r.Run(ctx, "sudo", full...)
 }
 

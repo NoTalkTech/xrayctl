@@ -8,11 +8,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ConfigPath 配置文件路径，可修改用于测试
+// ConfigPath 配置文件路径，可修改用于测试.
 var ConfigPath = DefaultConfigPath
 
-// fillDefaults 自动填充空字段为默认值
-func fillDefaults(cfg *Config, defaultCfg *Config) {
+// fillDefaults 自动填充空字段为默认值.
+func fillDefaults(cfg, defaultCfg *Config) {
 	cfgVal := reflect.ValueOf(cfg).Elem()
 	defaultVal := reflect.ValueOf(defaultCfg).Elem()
 
@@ -24,7 +24,7 @@ func fillDefaults(cfg *Config, defaultCfg *Config) {
 	}
 }
 
-// LoadConfig 加载配置文件，如果不存在则返回默认配置
+// LoadConfig 加载配置文件，如果不存在则返回默认配置.
 func LoadConfig() (*Config, error) {
 	defaultCfg := DefaultConfig()
 
@@ -32,8 +32,9 @@ func LoadConfig() (*Config, error) {
 	if _, err := os.Stat(ConfigPath); os.IsNotExist(err) {
 		// 尝试保存默认配置
 		if err := SaveConfig(defaultCfg); err != nil {
-			return defaultCfg, nil // 保存失败也返回默认配置
+			return defaultCfg, nil //nolint:nilerr // 保存失败也返回默认配置
 		}
+
 		return defaultCfg, nil
 	}
 
@@ -72,18 +73,24 @@ func SaveConfig(cfg *Config) error {
 	if err != nil {
 		return err
 	}
+
 	tmpPath := tmp.Name()
+
 	// 失败路径上清掉 tmp；成功 rename 之后这次 Remove 是 no-op (文件已不在旧名)。
-	defer os.Remove(tmpPath)
+	defer func() {
+		_ = os.Remove(tmpPath) //nolint:errcheck // cleanup-only, error ignored
+	}()
 
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
+		_ = tmp.Close() //nolint:errcheck // close error ignored on write failure
 		return err
 	}
+
 	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
+		_ = tmp.Close() //nolint:errcheck // close error ignored on chmod failure
 		return err
 	}
+
 	if err := tmp.Close(); err != nil {
 		return err
 	}
