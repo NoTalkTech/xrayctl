@@ -28,12 +28,13 @@ func warpAptRepoLine(codename string) string {
 // is rejected with a clear error rather than silently 404'ing later.
 func warpRPMURL(rhelVersion, goarch string) (string, error) {
 	if goarch != "amd64" {
-		return "", fmt.Errorf("Cloudflare 没有为 %s 架构发布 WARP RPM；请改用 apt 系统或手动安装 warp-cli", goarch)
+		return "", fmt.Errorf("cloudflare 没有为 %s 架构发布 WARP RPM；请改用 apt 系统或手动安装 warp-cli", goarch)
 	}
+
 	return fmt.Sprintf("https://pkg.cloudflareclient.com/pool/cloudflare-warp-el%s.x86_64.rpm", rhelVersion), nil
 }
 
-// SetupWarp 安装配置WARP代理
+// SetupWarp 安装配置WARP代理.
 func SetupWarp(cfg *config.Config) error {
 	internal.PrintYellow("正在部署 Cloudflare WARP 出口...")
 
@@ -45,7 +46,11 @@ func SetupWarp(cfg *config.Config) error {
 
 	if status := internal.ServiceStatus(internal.ServiceWarp); status != internal.StatusActive {
 		internal.PrintYellow("启动 warp-svc 守护进程...")
-		internal.ExecCommandWithSudo("systemctl", "start", internal.ServiceWarp)
+
+		if _, err := internal.ExecCommandWithSudo("systemctl", "start", internal.ServiceWarp); err != nil {
+			internal.PrintYellow("启动warp-svc失败: %v", err)
+		}
+
 		time.Sleep(3 * time.Second)
 	}
 
@@ -58,7 +63,8 @@ func SetupWarp(cfg *config.Config) error {
 	// We don't error out on a non-zero exit: the common case is "already
 	// registered" which returns non-zero, and the next mandatory step
 	// (`warp-cli mode proxy`) will surface any real problem.
-	if _, err := internal.ExecCommand("sh", "-c", `echo "y" | script -q -c "warp-cli registration new" /dev/null 2>&1`); err != nil {
+	if _, err := internal.ExecCommand("sh", "-c",
+		`echo "y" | script -q -c "warp-cli registration new" /dev/null 2>&1`); err != nil {
 		internal.PrintYellow("WARP 注册步骤跳过 (已注册或暂时失败，后续命令会再验证)")
 	}
 
@@ -82,7 +88,9 @@ func SetupWarp(cfg *config.Config) error {
 		internal.PrintRed("WARP连通性测试失败: %v", err)
 		return err
 	}
+
 	internal.PrintGreen("WARP部署成功，出口IP: %s", ip)
+
 	return nil
 }
 
@@ -115,13 +123,14 @@ func installWarpApt() error {
 		internal.PrintRed("读取发行版代号失败: %v", err)
 		return err
 	}
+
 	codename := strings.TrimSpace(codenameOut)
 	if codename == "" {
 		return fmt.Errorf("empty distro codename from lsb_release")
 	}
 
 	// os.WriteFile avoids piping user-controlled codename through a shell.
-	if err := os.WriteFile(warpAptSourcesList, []byte(warpAptRepoLine(codename)), 0o644); err != nil {
+	if err := os.WriteFile(warpAptSourcesList, []byte(warpAptRepoLine(codename)), 0o600); err != nil {
 		internal.PrintRed("写入WARP源失败: %v", err)
 		return err
 	}
@@ -130,10 +139,12 @@ func installWarpApt() error {
 		internal.PrintRed("apt update 失败: %v", err)
 		return err
 	}
+
 	if _, err := internal.ExecCommandWithSudo("apt", "install", "-y", "cloudflare-warp"); err != nil {
 		internal.PrintRed("WARP安装失败: %v", err)
 		return err
 	}
+
 	return nil
 }
 
@@ -145,6 +156,7 @@ func installWarpRPM() error {
 		internal.PrintRed("读取RHEL版本失败: %v", err)
 		return err
 	}
+
 	rhel := strings.TrimSpace(rhelOut)
 	if rhel == "" {
 		return fmt.Errorf("empty RHEL version from rpm -E %%rhel")
@@ -155,24 +167,32 @@ func installWarpRPM() error {
 		internal.PrintRed("%v", err)
 		return err
 	}
+
 	if _, err := internal.ExecCommand("rpm", "-ivh", url); err != nil {
 		internal.PrintRed("WARP安装失败: %v", err)
 		return err
 	}
+
 	return nil
 }
 
-// RestartWarp 重启WARP
+// RestartWarp 重启WARP.
 func RestartWarp(cfg *config.Config) error {
-	internal.ExecCommand("warp-cli", "disconnect")
+	if _, err := internal.ExecCommand("warp-cli", "disconnect"); err != nil {
+		internal.PrintYellow("断开WARP连接失败: %v", err)
+	}
+
 	if _, err := internal.ExecCommand("warp-cli", "connect"); err != nil {
 		return err
 	}
+
 	ip, err := internal.GetWarpIP(cfg.WARPPort)
 	if err != nil {
 		return err
 	}
+
 	internal.PrintGreen("WARP重启成功，出口IP: %s", ip)
+
 	return nil
 }
 

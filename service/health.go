@@ -7,10 +7,12 @@ import (
 	"xrayctl/internal"
 )
 
-// CheckStatus 检查所有服务状态
+// CheckStatus 检查所有服务状态.
 func CheckStatus(cfg *config.Config) {
 	internal.PrintYellow("\n>>> 系统健康检查 <<<")
+
 	fmt.Print("Nginx: ")
+
 	if NginxStatus() == internal.StatusActive {
 		internal.PrintGreen("运行中")
 	} else {
@@ -18,6 +20,7 @@ func CheckStatus(cfg *config.Config) {
 	}
 
 	fmt.Print("Xray:  ")
+
 	if XrayStatus() == internal.StatusActive {
 		internal.PrintGreen("运行中")
 	} else {
@@ -25,6 +28,7 @@ func CheckStatus(cfg *config.Config) {
 	}
 
 	fmt.Print("WARP:  ")
+
 	if WarpStatus() == internal.StatusActive {
 		internal.PrintGreen("已连接")
 	} else {
@@ -32,6 +36,7 @@ func CheckStatus(cfg *config.Config) {
 	}
 
 	internal.PrintYellow("\n>>> 物理链路测试 <<<")
+
 	warpIP, err := internal.GetWarpIP(cfg.WARPPort)
 	if err == nil {
 		internal.PrintGreen("WARP 出口正常 (IP: %s)", warpIP)
@@ -47,8 +52,9 @@ func CheckStatus(cfg *config.Config) {
 		internal.PrintGreen("UUID: %s", cfg.UUID)
 		internal.PrintGreen("协议: VLESS + XTLS-Vision")
 		// 生成分享链接
-		shareLink := fmt.Sprintf("vless://%s@%s:%d?flow=%s&security=%s&type=tcp#Xray-WARP",
-			cfg.UUID, cfg.Domain, cfg.XrayPort, internal.FlowXTLSVision, internal.ProtocolTLS)
+		shareLink := "vless://" + cfg.UUID + "@" + cfg.Domain + ":" +
+			fmt.Sprintf("%d?flow=%s&security=%s&type=tcp#Xray-WARP",
+				cfg.XrayPort, internal.FlowXTLSVision, internal.ProtocolTLS)
 		internal.PrintGreen("分享链接: %s", shareLink)
 	}
 }

@@ -8,13 +8,14 @@ import (
 	"xrayctl/internal"
 )
 
-// CheckSystemEnvironment 检查系统环境并自动安装缺失依赖
+// CheckSystemEnvironment 检查系统环境并自动安装缺失依赖.
 func CheckSystemEnvironment(cfg *config.Config) {
 	internal.PrintYellow(">>> 系统环境检查 <<<")
 
 	// 检查必需命令
 	requiredCmds := []string{"curl", "jq", "nginx", "systemctl"}
 	missingCmds := []string{}
+
 	for _, cmd := range requiredCmds {
 		if !internal.CommandExists(cmd) {
 			missingCmds = append(missingCmds, cmd)
@@ -22,33 +23,41 @@ func CheckSystemEnvironment(cfg *config.Config) {
 	}
 
 	// 如果有缺失依赖，自动安装
-	if len(missingCmds) > 0 {
+	if len(missingCmds) > 0 { //nolint:nestif // sequential checks with user interaction
 		internal.PrintRed("检测到缺失依赖:")
+
 		for _, cmd := range missingCmds {
 			fmt.Printf("  - %s\n", cmd)
 		}
+
 		fmt.Println()
 		fmt.Print("是否需要自动安装这些依赖？(Y/n): ")
 
 		var confirm string
-		fmt.Scanln(&confirm)
-		if strings.ToLower(confirm) == "y" || strings.ToLower(confirm) == "yes" || confirm == "" {
+
+		_, _ = fmt.Scanln(&confirm) //nolint:errcheck // user input prompt, best-effort
+
+		if strings.EqualFold(confirm, "y") || strings.EqualFold(confirm, "yes") || confirm == "" {
 			err := InstallBase()
 			if err != nil {
 				internal.PrintYellow("依赖安装完成，请重试")
 				return
 			}
+
 			// 安装完成后，重新检查
 			missingCmds = []string{}
+
 			for _, cmd := range requiredCmds {
 				if !internal.CommandExists(cmd) {
 					missingCmds = append(missingCmds, cmd)
 				}
 			}
+
 			if len(missingCmds) > 0 {
 				internal.PrintRed("依赖安装失败，请手动安装")
 				return
 			}
+
 			internal.PrintGreen("所有依赖安装完成")
 		} else {
 			internal.PrintGreen("跳过依赖安装")
@@ -59,6 +68,7 @@ func CheckSystemEnvironment(cfg *config.Config) {
 
 	// 检查配置文件
 	internal.PrintYellow("\n>>> 配置文件检查 <<<")
+
 	if internal.FileExists(config.ConfigPath) {
 		internal.PrintGreen("配置文件: %s", config.ConfigPath)
 	} else {
@@ -85,6 +95,7 @@ func CheckSystemEnvironment(cfg *config.Config) {
 	} else {
 		internal.PrintYellow("Nginx主配置: 不存在")
 	}
+
 	if internal.FileExists(cfg.NginxConfig) {
 		internal.PrintGreen("Nginx Vless配置: %s", cfg.NginxConfig)
 	} else {
@@ -92,13 +103,14 @@ func CheckSystemEnvironment(cfg *config.Config) {
 	}
 }
 
-// InstallBase 安装基础依赖和开启BBR
+// InstallBase 安装基础依赖和开启BBR.
 func InstallBase() error {
 	internal.PrintYellow("正在安装系统依赖与开启 BBR 加速...")
 
 	// 检查所有必需命令是否已存在
 	requiredCmds := []string{"curl", "jq", "nginx", "uuidgen", "socat", "lsb_release", "gpg", "systemctl", "wget", "git"}
 	missingCmds := []string{}
+
 	for _, cmd := range requiredCmds {
 		if !internal.CommandExists(cmd) {
 			missingCmds = append(missingCmds, cmd)
@@ -110,22 +122,27 @@ func InstallBase() error {
 		internal.PrintGreen("所有依赖已安装，跳过安装步骤")
 	} else {
 		missedCmdsStr := strings.Join(missingCmds, " ")
+
 		// 检测系统类型
-		var installCmd string
-		var pkgManager string
-		if internal.CommandExists("apt") {
+		var (
+			installCmd string
+			pkgManager string
+		)
+
+		switch {
+		case internal.CommandExists("apt"):
 			// Debian/Ubuntu系
 			installCmd = "apt update && apt install -y " + missedCmdsStr
 			pkgManager = "apt"
-		} else if internal.CommandExists("yum") {
+		case internal.CommandExists("yum"):
 			// CentOS/RHEL系
 			installCmd = "yum install -y " + missedCmdsStr
 			pkgManager = "yum"
-		} else if internal.CommandExists("dnf") {
+		case internal.CommandExists("dnf"):
 			// 新CentOS/Fedora
 			installCmd = "dnf install -y " + missedCmdsStr
 			pkgManager = "dnf"
-		} else {
+		default:
 			internal.PrintRed("不支持的系统类型，仅支持Debian/Ubuntu/CentOS")
 			return fmt.Errorf("unsupported system")
 		}
@@ -139,11 +156,16 @@ func InstallBase() error {
 			internal.PrintRed("依赖安装失败: %v", err)
 			return err
 		}
+
 		internal.PrintGreen("系统依赖安装完成")
 	}
 
 	// 检查BBR是否已经开启
-	bbrOutput, _ := internal.ExecCommand("sysctl", "net.ipv4.tcp_congestion_control")
+	bbrOutput, err := internal.ExecCommand("sysctl", "net.ipv4.tcp_congestion_control")
+	if err != nil {
+		bbrOutput = ""
+	}
+
 	if !strings.Contains(bbrOutput, "bbr") {
 		// 开启BBR
 		cmds := []string{
@@ -158,11 +180,13 @@ func InstallBase() error {
 				return err
 			}
 		}
+
 		internal.PrintGreen("BBR加速开启成功")
 	} else {
 		internal.PrintGreen("BBR加速已经开启")
 	}
 
 	internal.PrintGreen("基础环境配置完成")
+
 	return nil
 }

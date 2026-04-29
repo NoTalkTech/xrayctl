@@ -1,7 +1,7 @@
 package service
 
 import (
-	"crypto/md5"
+	"crypto/md5" //nolint:gosec // MD5 used only for deterministic UUID generation, not security
 	"encoding/json"
 	"fmt"
 
@@ -17,10 +17,12 @@ type XrayConfig struct {
 	Routing   XrayRouting    `json:"routing"`
 }
 
+// XrayLog defines the log configuration for Xray.
 type XrayLog struct {
 	Loglevel string `json:"loglevel"`
 }
 
+// XrayInbound defines an inbound connection configuration.
 type XrayInbound struct {
 	Port           int                 `json:"port"`
 	Protocol       string              `json:"protocol"`
@@ -29,58 +31,69 @@ type XrayInbound struct {
 	StreamSettings XrayStreamSettings  `json:"streamSettings"`
 }
 
+// XrayInboundSettings defines the settings for an inbound connection.
 type XrayInboundSettings struct {
 	Clients    []XrayClient   `json:"clients"`
 	Decryption string         `json:"decryption"`
 	Fallbacks  []XrayFallback `json:"fallbacks"`
 }
 
+// XrayClient defines a VLESS client with ID and flow.
 type XrayClient struct {
 	ID   string `json:"id"`
 	Flow string `json:"flow"`
 }
 
+// XrayFallback defines a fallback destination for VLESS.
 type XrayFallback struct {
 	Dest string `json:"dest"`
 	Xver int    `json:"xver"`
 }
 
+// XrayStreamSettings defines stream transport settings.
 type XrayStreamSettings struct {
 	Network     string          `json:"network"`
 	Security    string          `json:"security"`
 	TLSSettings XrayTLSSettings `json:"tlsSettings"`
 }
 
+// XrayTLSSettings defines TLS settings for Xray stream.
 type XrayTLSSettings struct {
 	RejectUnknownSni bool              `json:"rejectUnknownSni"`
 	Certificates     []XrayCertificate `json:"certificates"`
 }
 
+// XrayCertificate defines a TLS certificate entry.
 type XrayCertificate struct {
 	CertificateFile string `json:"certificateFile"`
 	KeyFile         string `json:"keyFile"`
 }
 
+// XrayOutbound defines an outbound connection configuration.
 type XrayOutbound struct {
 	Protocol string                `json:"protocol"`
 	Tag      string                `json:"tag"`
 	Settings *XrayOutboundSettings `json:"settings,omitempty"`
 }
 
+// XrayOutboundSettings defines settings for an outbound connection.
 type XrayOutboundSettings struct {
 	Servers []XrayOutboundServer `json:"servers,omitempty"`
 }
 
+// XrayOutboundServer defines a SOCKS outbound server entry.
 type XrayOutboundServer struct {
 	Address string `json:"address"`
 	Port    int    `json:"port"`
 }
 
+// XrayRouting defines the routing configuration.
 type XrayRouting struct {
 	DomainStrategy string            `json:"domainStrategy"`
 	Rules          []XrayRoutingRule `json:"rules"`
 }
 
+// XrayRoutingRule defines a single routing rule.
 type XrayRoutingRule struct {
 	Type        string   `json:"type"`
 	OutboundTag string   `json:"outboundTag"`
@@ -90,11 +103,13 @@ type XrayRoutingRule struct {
 
 const xrayInboundTag = "VLESS-XTLS-in"
 
-// SetupXray 安装配置Xray
+// SetupXray 安装配置Xray.
 func SetupXray(cfg *config.Config) error {
 	internal.PrintYellow("正在部署 Xray 核心...")
 
-	internal.MkdirIfNotExists(cfg.CertDir, 0o755)
+	if err := internal.MkdirIfNotExists(cfg.CertDir, 0o755); err != nil {
+		internal.PrintYellow("创建证书目录失败: %v", err)
+	}
 
 	if !internal.CommandExists("xray") {
 		_, err := internal.ExecCommand("bash", "-c",
@@ -111,10 +126,13 @@ func SetupXray(cfg *config.Config) error {
 	if uuid == "" {
 		uuid = oldUUID
 	}
+
 	if uuid == "" {
 		uuid = generateUUIDFromEmail(cfg.Email)
 	}
+
 	cfg.UUID = uuid
+
 	if err := config.SaveConfig(cfg); err != nil {
 		internal.PrintYellow("保存配置失败（UUID 可能未持久化）: %v", err)
 	}
@@ -141,6 +159,7 @@ func SetupXray(cfg *config.Config) error {
 
 	internal.EnableService(internal.ServiceXray)
 	internal.PrintGreen("Xray部署成功！UUID: %s", uuid)
+
 	return nil
 }
 
@@ -150,17 +169,21 @@ func extractExistingUUID(path string) string {
 	if !internal.FileExists(path) {
 		return ""
 	}
+
 	data, err := internal.ReadFile(path)
 	if err != nil {
 		return ""
 	}
+
 	var parsed XrayConfig
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		return ""
 	}
+
 	if len(parsed.Inbounds) == 0 || len(parsed.Inbounds[0].Settings.Clients) == 0 {
 		return ""
 	}
+
 	return parsed.Inbounds[0].Settings.Clients[0].ID
 }
 
@@ -212,11 +235,13 @@ func buildXrayConfigJSON(cfg *config.Config, uuid string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	return string(data) + "\n", nil
 }
 
 func buildXrayRoutingRules(warpDomains []string) []XrayRoutingRule {
 	rules := make([]XrayRoutingRule, 0, len(warpDomains)+1)
+
 	for _, d := range warpDomains {
 		rules = append(rules, XrayRoutingRule{
 			Type:        "field",
@@ -224,15 +249,17 @@ func buildXrayRoutingRules(warpDomains []string) []XrayRoutingRule {
 			Domain:      []string{d},
 		})
 	}
+
 	rules = append(rules, XrayRoutingRule{
 		Type:        "field",
 		OutboundTag: "direct",
 		InboundTag:  []string{xrayInboundTag},
 	})
+
 	return rules
 }
 
-// XrayStatus 获取Xray运行状态
+// XrayStatus 获取Xray运行状态.
 func XrayStatus() string {
 	return internal.ServiceStatus(internal.ServiceXray)
 }
@@ -243,8 +270,10 @@ func generateUUIDFromEmail(email string) string {
 	if email == "" {
 		return internal.GenerateUUID()
 	}
-	h := md5.Sum([]byte(email))
+
+	h := md5.Sum([]byte(email)) //nolint:gosec // UUID derivation, not security use
 	h[6] = (h[6] & 0x0f) | 0x30 // version 3 (MD5 name-based)
 	h[8] = (h[8] & 0x3f) | 0x80 // RFC 4122 variant
+
 	return fmt.Sprintf("%x-%x-%x-%x-%x", h[0:4], h[4:6], h[6:8], h[8:10], h[10:16])
 }

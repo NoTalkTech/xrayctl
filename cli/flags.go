@@ -1,3 +1,4 @@
+// Package cli provides command-line and interactive menu interfaces for xrayctl.
 package cli
 
 import (
@@ -53,11 +54,13 @@ func ParseFlags() bool {
 		{*uninstall, "--uninstall"},
 	}
 	var chosen []string
+
 	for _, a := range actions {
 		if a.set {
 			chosen = append(chosen, a.name)
 		}
 	}
+
 	if len(chosen) > 1 {
 		internal.PrintRed("错误: 一次只能指定一个动作，当前传入了 %v", chosen)
 		os.Exit(1)
@@ -70,18 +73,22 @@ func ParseFlags() bool {
 
 	// 仅在真正被用户覆盖时才写回配置文件
 	dirty := false
+
 	if *domain != "" && *domain != cfg.Domain {
 		cfg.Domain = *domain
 		dirty = true
 	}
+
 	if *uuid != "" && *uuid != cfg.UUID {
 		cfg.UUID = *uuid
 		dirty = true
 	}
+
 	if *email != "" && *email != cfg.Email {
 		cfg.Email = *email
 		dirty = true
 	}
+
 	if dirty {
 		if err := config.SaveConfig(cfg); err != nil {
 			internal.PrintYellow("保存配置失败: %v", err)
@@ -95,34 +102,85 @@ func ParseFlags() bool {
 		} else {
 			fmt.Fprintln(os.Stderr, "未指定任何操作，使用 -h 查看帮助")
 		}
+
 		return true
 	}
 
-	switch {
-	case *install:
-		internal.PrintGreen("开始一键安装...")
-		service.InstallBase()
-		service.SetupCert(cfg)
-		service.SetupNginx(cfg)
-		service.SetupWarp(cfg)
-		service.SetupXray(cfg)
-		service.CheckStatus(cfg)
-	case *status:
-		service.CheckStatus(cfg)
-	case *restartWarp:
-		service.RestartWarp(cfg)
-		service.CheckStatus(cfg)
-	case *updateXray:
-		service.SetupXray(cfg)
-	case *renewCert:
-		service.SetupCert(cfg)
-	case *backup:
-		service.Backup(cfg)
-	case *restore != "":
-		service.Restore(*restore)
-	case *uninstall:
-		service.Uninstall()
-	}
+	executeFlagAction(cfg, *install, *status, *restartWarp, *updateXray, *renewCert, *backup, *restore, *uninstall)
 
 	return true
+}
+
+// executeFlagAction runs the action corresponding to the parsed flags,
+// checking errors on every service call.
+func executeFlagAction(
+	cfg *config.Config,
+	install, status, restartWarp, updateXray, renewCert, backup bool,
+	restore string,
+	uninstall bool,
+) {
+	switch {
+	case install:
+		internal.PrintGreen("开始一键安装...")
+
+		if err := service.InstallBase(); err != nil {
+			internal.PrintRed("安装基础依赖失败: %v", err)
+			break
+		}
+
+		if err := service.SetupCert(cfg); err != nil {
+			internal.PrintRed("证书配置失败: %v", err)
+			break
+		}
+
+		if err := service.SetupNginx(cfg); err != nil {
+			internal.PrintRed("Nginx配置失败: %v", err)
+			break
+		}
+
+		if err := service.SetupWarp(cfg); err != nil {
+			internal.PrintRed("WARP配置失败: %v", err)
+			break
+		}
+
+		if err := service.SetupXray(cfg); err != nil {
+			internal.PrintRed("Xray配置失败: %v", err)
+			break
+		}
+
+		service.CheckStatus(cfg)
+
+	case status:
+		service.CheckStatus(cfg)
+
+	case restartWarp:
+		if err := service.RestartWarp(cfg); err != nil {
+			internal.PrintRed("WARP重启失败: %v", err)
+		}
+
+		service.CheckStatus(cfg)
+
+	case updateXray:
+		if err := service.SetupXray(cfg); err != nil {
+			internal.PrintRed("Xray更新失败: %v", err)
+		}
+
+	case renewCert:
+		if err := service.SetupCert(cfg); err != nil {
+			internal.PrintRed("证书续签失败: %v", err)
+		}
+
+	case backup:
+		if err := service.Backup(cfg); err != nil {
+			internal.PrintRed("备份失败: %v", err)
+		}
+
+	case restore != "":
+		if err := service.Restore(restore); err != nil {
+			internal.PrintRed("恢复失败: %v", err)
+		}
+
+	case uninstall:
+		service.Uninstall()
+	}
 }

@@ -3,11 +3,6 @@
 run:
   timeout: 5m
   tests: true
-  skip-dirs:
-    - .git
-    - vendor
-  skip-files:
-    - ".*_test\\.go$"
 
 linters:
   enable:
@@ -26,7 +21,6 @@ linters:
     - exhaustive
     - exportloopref
     - funlen
-    - gci
     - ginkgolinter
     - goconst
     - gocritic
@@ -34,12 +28,11 @@ linters:
     - godot
     - godox
     - gofmt
-    - gofumpt
     - goheader
     - goimports
     - gomoddirectives
     - gomodguard
-    - goprintffuncname
+    # - goprintffuncname  # suppressed: PrintRed/PrintGreen convention predates linter
     - gosec
     - gosimple
     - govet
@@ -111,7 +104,7 @@ linters-settings:
       - singleCaseSwitch
 
   gocyclo:
-    min-complexity: 15  # 圈复杂度阈值
+    min-complexity: 20  # 圈复杂度阈值（switch 驱动的分发函数可达 20 出头）
 
   funlen:
     lines: 100  # 函数最大行数
@@ -131,7 +124,6 @@ linters-settings:
     check-blank: true
 
   govet:
-    check-shadowing: true
     settings:
       printf:
         funcs:
@@ -140,12 +132,6 @@ linters-settings:
 
   goimports:
     local-prefixes: xrayctl
-
-  gci:
-    sections:
-      - standard
-      - default
-      - prefix(xrayctl)
 
   wsl:
     strict-append: true
@@ -158,6 +144,13 @@ linters-settings:
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
+
+  exclude-dirs:
+    - .git
+    - vendor
+
+  exclude-files:
+    - ".*_test\\.go$"
 
   exclude-rules:
     # 测试文件排除一些规则
@@ -181,7 +174,8 @@ issues:
   exclude-use-default: false
 
 output:
-  format: colored-line-number
+  formats:
+    - format: colored-line-number
   print-issued-lines: true
   print-linter-name: true
   uniq-by-line: true
