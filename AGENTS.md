@@ -1,76 +1,92 @@
 <claude-mem-context>
 # Memory Context
 
-# [xrayctl] recent context, 2026-04-28 6:05pm GMT+8
+# [xrayctl] recent context, 2026-04-29 12:27pm GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (14,597t read) | 233,210t work | 94% savings
+Stats: 50 obs (16,291t read) | 321,865t work | 95% savings
 
 ### Apr 27, 2026
-S288 Fix golangci-lint CI pipeline errors across all packages in xrayctl Go project (Apr 27 at 5:53 PM)
-S305 Fix golangci-lint CI pipeline errors across all packages in xrayctl Go project (Apr 27 at 5:55 PM)
-S347 Fix golangci-lint CI pipeline failures — golangci-lint run --timeout 5m ./... fails in CI build pipeline for xrayctl project (Apr 27 at 5:59 PM)
-2119 6:25p ✅ base.go wsl violation fixed — blank line before comment block in InstallBase
-2120 6:26p ✅ health.go wsl violations fully resolved
-2121 " 🔵 All non-test service/ files now wsl-clean
-2122 6:27p ✅ base.go var declarations consolidated to grouped var block
-2123 " ✅ All production service/ files pass wsl+lll+gosec lint with zero violations
-2125 6:28p ✅ Zero lint violations in all production service/ source files
-2126 " 🔵 Project-wide lint baseline: 152 issues across 18 files
-2133 6:36p 🔵 Golangci-lint CI pipeline — wsl category completed, remaining violations identified
-2134 " 🔵 Three DWD traffic mart SQL templates already have NULL-to-NA coalesce logic
-2138 6:38p 🔴 Package comment added to service/backup.go to fix revive linter violation
-S358 Fix golangci-lint CI pipeline failures — golangci-lint run --timeout 5m ./... fails in CI build pipeline for xrayctl project (Apr 27 at 6:39 PM)
-2139 6:39p 🔴 Unchecked ExecCommandWithSudo calls in cert.go fixed for errcheck linter
-2140 " 🔴 Second unchecked MkdirIfNotExists call in cert.go fixed for errcheck
-2141 6:40p 🔴 Four unchecked ExecCommandWithSudo calls in uninstall.go fixed for errcheck
-2143 " 🔵 Unchecked systemctl start warp call identified in warp.go line 49
-2144 6:41p 🔴 CLI flag handler refactored with error checking for all service calls
-2145 " 🔵 Unchecked systemctl start warp call in service/warp.go still pending fix
-2146 " 🔵 SetupWarp function context examined for errcheck fix — script/pty workaround noted
-2147 " 🔴 Unchecked systemctl start warp call in warp.go fixed for errcheck linter
-2148 " 🔴 Unchecked warp-cli disconnect call in RestartWarp fixed for errcheck
-2151 6:43p 🔴 Golangci-lint errcheck category completed across service/ package
-S402 Set up Codex CLI in the current environment — install, authenticate, and verify readiness (Apr 27 at 6:43 PM)
-2152 6:44p 🔵 Xrayctl golangci-lint config has extensive linter enablement with 75+ linters
-2153 6:45p 🔵 Complete service function signature audit — error-returning vs void functions mapped
-2154 6:46p 🔵 Config package function signatures mapped — LoadConfig, SaveConfig, DefaultConfig
-2158 6:51p 🔴 Remaining errcheck violation in menu.go suppressed with nolint directive
-2159 " 🔄 Install pipeline extracted from executeMenuAction to reduce complexity
-2160 " 🔵 executeMenuInstallAction function created but case "1" not yet updated to call it
-2161 6:52p 🔄 Install pipeline inline code in case "1" replaced with function call
-2162 6:53p 🔴 Golangci-lint CI pipeline fix ongoing — executeMenuAction function extraction for gocyclo/funlen reduction
-2163 " 🔵 Full menu.go inspected — executeMenuAction switch structure mapped for extraction planning
-2178 7:29p 🔵 Golangci-lint CI pipeline failure reported for xrayctl project
-2179 7:30p 🔵 Root cause of golangci-lint CI failure traced to config/manager.go compilation error
-2180 7:31p 🔴 config/manager.go syntax error fixed — unexpected EOF in deferred function call
-2181 8:08p 🔵 config/manager.go defer block examined for syntax error root cause
-2182 8:09p 🔴 config/manager.go compilation error fixed — malformed nolint comments repaired
-2183 " 🔵 Seven precise golangci-lint violations mapped in config/manager.go
-2184 " 🔄 First gocritic whyNoLint violation fixed with explanatory comment
 2185 8:10p 🔵 Three gocritic whyNoLint violations annotated with explanatory comments
 ### Apr 28, 2026
 2186 11:36a ✅ Codex CLI setup initiated in primary session
-S403 Codex CLI review gate enabled via codex:setup (Apr 28 at 11:39 AM)
 2187 11:44a ✅ Codex CLI review gate enabled via codex:setup
-S407 Investigate xrayctl project architecture via Codex CLI with GPT-5.5 (Apr 28 at 11:44 AM)
 2188 11:48a 🔵 Project investigation requested — tech architecture and design mode recognition
 2189 11:50a 🔵 xrayctl Go project architecture mapped — config/service/internal three-layer design
 2190 " 🔵 Project architecture investigation requested — awaiting tool execution data
 2191 11:51a 🔵 Codex GPT-5.5 architecture investigation of xrayctl project
-S409 Codex GPT-5.5 rescue dispatched to produce optimization ideas for the xrayctl project (Apr 28 at 11:51 AM)
 S412 Codex GPT-5.5 rescue optimization ideas for xrayctl project — results summarized in Chinese for the user (Apr 28 at 12:16 PM)
+S414 Codex GPT-5.5 produced xrayctl optimization plan with 7 priorities (Apr 28 at 12:18 PM)
 2192 12:19p ✅ Codex CLI setup invoked in primary session
 2193 12:20p 🔵 Codex GPT-5.5 produced xrayctl optimization plan with 7 priorities
-S414 Codex GPT-5.5 produced xrayctl optimization plan with 7 priorities (Apr 28 at 12:20 PM)
+S471 Codex CLI rescue session initiated for OPTIMIZATION.md review against latest xrayctl codebase (Apr 28 at 12:20 PM)
 2198 2:55p 🔵 Gstack auto-upgrade blocked by missing bun runtime dependency
 2199 " 🔵 Gstack stuck in partially-upgraded state — git HEAD advanced but setup
 2200 2:56p 🔵 Gstack fork-based git setup with dual remotes
 2201 2:57p 🔵 Gstack setup script entry point confirmed with bun gate
 2202 " ✅ Gstack rolled back to v1.11.1.0 after failed upgrade
+### Apr 29, 2026
+2220 10:07a 🔵 Codex CLI delegated to review OPTIMIZATION.md against current codebase
+2221 10:08a ✅ OPTIMIZATION.md review or update requested
+2222 10:09a 🔵 OPTIMIZATION_PLAN.md gap analysis — codebase audit against plan
+2223 " 🔵 Go build cache operation-not-permitted errors block xrayctl tests and lint
+2224 10:10a 🔵 Go build cache macOS permission issue worked around with GOCACHE override
+2225 " ✅ All xrayctl Go tests passing and golangci-lint clean with GOCACHE workaround
+2226 10:12a 🔄 OPTIMIZATION.md review initiated for xrayctl project
+2227 " 🔵 xrayctl codebase exploration for OPTIMIZATION.md review
+2228 " ✅ Trailing whitespace fixed in OPTIMIZATION_PLAN.md
+2229 10:13a ✅ OPTIMIZATION_PLAN.md refreshed against latest xrayctl codebase
+2230 10:14a ✅ OPTIMIZATION_PLAN.md review and refresh completed
+2231 10:15a ✅ Codex CLI rescue session initiated for OPTIMIZATION.md review against latest xrayctl codebase
+S474 Forward OPTIMIZATION_PLAN.md vision query to Codex CLI — GPT-5.5 explained the current KISS refactor strategy for xrayctl (Apr 29 at 10:15 AM)
+2232 11:07a 🔵 OPTIMIZATION_PLAN.md vision: conservative KISS refactor for xrayctl
+S477 Codex CLI (GPT-5.5) first-principles review completed for xrayctl refactoring plan (Apr 29 at 11:08 AM)
+2234 11:17a ⚖️ GPT-5.5 first-principles review re-prioritizes xrayctl Phase 1 refactoring
+2235 11:18a ⚖️ Codex CLI (GPT-5.5) first-principles review completed for xrayctl refactoring plan
+S482 Codex GPT-5.5 task breakdown of xrayctl's OPTIMIZATION_PLAN.md — analyze and decompose into ordered, implementable task sets without writing any code (Apr 29 at 11:18 AM)
+2236 11:35a 🔵 Codex rescue thread confirmed completed for xrayctl OPTIMIZATION_PLAN.md analysis
+2237 11:37a 🔵 OPTIMIZATION_PLAN.md task set breakdown completed for xrayctl
+2239 " ✅ GPT-5.5 produces 10-task-set breakdown for xrayctl OPTIMIZATION_PLAN.md
+S483 codex:rescue delegation to GPT-5.5 for OPTIMIZATION.md review — GPT-5.5 recommends updating OPTIMIZATION_PLAN.md and task sets (Apr 29 at 11:38 AM)
+2240 11:38a 🔵 codex:rescue delegation to GPT-5.5 for OPTIMIZATION.md review based on latest codebase
+2241 11:40a 🔵 Duplicate codex:rescue observation — same GPT-5.5 delegation for OPTIMIZATION.md
+S492 Completed the codex:rescue / first-principles review cycle for OPTIMIZATION.md against the latest xrayctl codebase (Apr 29 at 11:40 AM)
+2242 11:45a 🔵 OPTIMIZATION.md review delegated to GPT-5.5 against latest xrayctl codebase
+2243 11:46a 🔵 Codex write sandbox blocks OPTIMIZATION_PLAN.md and TASK_BREAKDOWN.md updates
+2245 11:47a ✅ OPTIMIZATION_PLAN.md goal rewritten to emphasize safe-failure for root-level installer
+2246 11:48a ✅ Phase 1 tasks reordered in OPTIMIZATION_PLAN.md — UUID fix promoted to #2
+2247 " ✅ OPTIMIZATION_PLAN.md UUID duplication removed; numbering still inconsistent
+2248 11:49a ✅ OPTIMIZATION_PLAN.md Phase 1 reorder completed with rationale annotations
+2249 " ✅ OPTIMIZATION_PLAN.md Review Checklist reordered to match Phase 1 priority
+2250 " ✅ TASK_BREAKDOWN.md created with 10-task decomposition mirroring OPTIMIZATION_PLAN.md
+S498 TASK_BREAKDOWN.md Phase 2 tasks expanded with scope boundaries and done-when criteria (Apr 29 at 11:53 AM)
+2251 11:54a 🔵 Primary session entering review phase for xrayctl optimization planning documents
+2253 11:55a ✅ Primary session reviewing full project documentation set for xrayctl
+2254 " 🔵 AGENTS.md found empty in xrayctl repo
+2255 11:56a 🔵 OPTIMIZATION.md re-reviewed via GPT-5.5 against latest xrayctl codebase
+2256 12:10p 🔵 Repeated /codex:rescue delegation for OPTIMIZATION.md review — same command issued again
+2257 " 🔄 OPTIMIZATION_PLAN.md Task 1 target rewritten from code snippet to prose
+2258 " 🔄 OPTIMIZATION_PLAN.md polished — Go code blocks replaced with prose across all 5 Phase 1 tasks
+2259 12:11p 🔄 TASK_BREAKDOWN.md Phase 2 tasks expanded with scope boundaries and done-when criteria
+S501 OPTIMIZATION_PLAN.md review via GPT-5.5 (codex:rescue) — applying Codex's review findings to finalize plan documents before Phase 1 implementation (Apr 29 at 12:11 PM)
+**Investigated**: The OPTIMIZATION_PLAN.md and TASK_BREAKDOWN.md were reviewed end-to-end against the latest xrayctl codebase. All Go code blocks embedded in the plan were identified as stale — they showed struct definitions and function signatures that could diverge during implementation. Shell command checklists (rg patterns) were also flagged as fragile documentation that would break if the project's structure changed.
 
-Access 233k tokens of past work via get_observations([IDs]) or mem-search skill.
+**Learned**: The plan documents had accumulated implementation-level Go code snippets (ErrInputClosed sentinel, StatusReport struct, InstallAll wrapper, EnvironmentReport struct, CheckStatus compatibility wrapper) that belonged in the codebase, not the plan. The review cycle revealed that prose acceptance criteria are more durable than embedded code or shell commands in planning documents. The one-way dependency graph (cmd → cli → {config, service, internal}) constrains all refactoring order.
+
+**Completed**: - OPTIMIZATION_PLAN.md: All 5 Phase 1 task Target sections stripped of Go code blocks and replaced with prose
+    - OPTIMIZATION_PLAN.md: Shell-based Done When criteria replaced with plain English verification statements
+    - OPTIMIZATION_PLAN.md: Task 4 status semantics clarified — render-only for --status vs render-and-evaluate for validation
+    - TASK_BREAKDOWN.md: Go code blocks removed from Task 4, replaced with context-sensitive semantics
+    - TASK_BREAKDOWN.md: Shell commands in Task 6 validation checklist replaced with prose; race detector requirement added
+    - TASK_BREAKDOWN.md: CLAUDE.md added to Task 2 file scope (UUID doc update may need skill routing changes)
+    - TASK_BREAKDOWN.md: Phase 2 Tasks 7-10 expanded from one-liners to full structured specs with scope boundaries, change descriptions, and done-when criteria
+    - Both documents now have uniform structure (Files, Change, Done when, Dependencies) across all 10 tasks
+
+**Next Steps**: Phase 1 implementation begins — starting with Task 1 (remove os.Exit from service/cert.go promptValue) and Task 2 (remove email-derived UUID fallback from service/xray.go), both of which are dependency-free and can proceed in parallel. The careful skill should be invoked before destructive edits.
+
+
+Access 322k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
