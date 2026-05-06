@@ -30,7 +30,7 @@ func ShowMenu() {
 	}
 
 	// 首次启动时进行环境检查
-	service.CheckSystemEnvironment(cfg)
+	runEnvironmentCheck(cfg)
 
 	scanner := bufio.NewScanner(os.Stdin)
 
@@ -95,37 +95,19 @@ func ShowMenu() {
 	}
 }
 
-// executeMenuInstallAction runs the full install pipeline, checking
-// errors at each step.
+// executeMenuInstallAction runs the full install pipeline.
 func executeMenuInstallAction(cfg *config.Config) {
 	internal.PrintGreen("开始一键安装...")
 
-	if err := service.InstallBase(); err != nil {
-		internal.PrintRed("安装基础依赖失败: %v", err)
-		return
+	if err := service.InstallAll(cfg); err != nil {
+		internal.PrintRed("一键安装失败: %v", err)
 	}
+}
 
-	if err := service.SetupCert(cfg); err != nil {
-		internal.PrintRed("证书配置失败: %v", err)
-		return
+func runEnvironmentCheck(cfg *config.Config) {
+	if _, err := service.CheckSystemEnvironment(cfg); err != nil {
+		internal.PrintRed("系统环境检查失败: %v", err)
 	}
-
-	if err := service.SetupNginx(cfg); err != nil {
-		internal.PrintRed("Nginx配置失败: %v", err)
-		return
-	}
-
-	if err := service.SetupWarp(cfg); err != nil {
-		internal.PrintRed("WARP配置失败: %v", err)
-		return
-	}
-
-	if err := service.SetupXray(cfg); err != nil {
-		internal.PrintRed("Xray配置失败: %v", err)
-		return
-	}
-
-	service.CheckStatus(cfg)
 }
 
 // executeMenuAction runs the menu action selected by the user,
@@ -158,14 +140,14 @@ func executeMenuAction(cfg *config.Config, scanner *bufio.Scanner) { //nolint:go
 			internal.PrintRed("WARP重启失败: %v", err)
 		}
 
-		service.CheckStatus(cfg)
+		renderStatus(cfg)
 
 	case "5":
 		// 查看状态
-		service.CheckStatus(cfg)
+		renderStatus(cfg)
 	case "6":
 		// 系统环境检查
-		service.CheckSystemEnvironment(cfg)
+		runEnvironmentCheck(cfg)
 	case "7":
 		// 备份
 		if err := service.Backup(cfg); err != nil {
@@ -203,7 +185,9 @@ func executeMenuAction(cfg *config.Config, scanner *bufio.Scanner) { //nolint:go
 
 		confirm := strings.ToLower(strings.TrimSpace(scanner.Text()))
 		if confirm == "y" || confirm == "yes" {
-			service.Uninstall()
+			if err := service.Uninstall(); err != nil {
+				internal.PrintRed("卸载失败: %v", err)
+			}
 		}
 
 	case "0":
@@ -226,6 +210,10 @@ func renderServiceStatus(label, status string) {
 	default:
 		fmt.Println(internal.Yellow + "not started" + internal.Reset)
 	}
+}
+
+func renderStatus(cfg *config.Config) {
+	service.PrintStatusReport(service.CollectStatus(cfg))
 }
 
 // clearScreen 清屏.

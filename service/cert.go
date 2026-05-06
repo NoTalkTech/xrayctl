@@ -41,8 +41,8 @@ func validateEmail(s string) error {
 //     this preserves the old non-interactive workflow where --install works
 //     as long as domain/email are already persisted.
 //   - If current is empty or invalid and we fall through to manual entry,
-//     EOF is fatal; we can't invent a value.
-func promptValue(prompt, current string, validate func(string) error) string {
+//     EOF returns an error; we can't invent a value.
+func promptValue(prompt, current string, validate func(string) error) (string, error) {
 	reader := bufio.NewReader(os.Stdin)
 
 	// readLine returns (trimmed line, ok). ok=false means stdin is closed
@@ -57,10 +57,13 @@ func promptValue(prompt, current string, validate func(string) error) string {
 		return strings.TrimSpace(line), true
 	}
 
-	exitNoInput := func() {
-		internal.PrintRed("读取输入失败 (stdin 已关闭?)")
-		internal.PrintRed("请在交互模式下补全%s，或直接编辑 %s 后重试。", prompt, config.DefaultConfigPath)
-		os.Exit(1)
+	errNoInput := func() error {
+		return fmt.Errorf(
+			"读取%s失败: stdin 已关闭且没有有效的已保存值; 请在交互模式下补全%s，或直接编辑 %s 后重试",
+			prompt,
+			prompt,
+			config.DefaultConfigPath,
+		)
 	}
 
 	accept := func(v string) (string, bool) {
@@ -87,16 +90,16 @@ func promptValue(prompt, current string, validate func(string) error) string {
 				// Non-interactive run: treat as implicit "Y" and try current.
 				// If current is valid we're done; if not, we can't recover.
 				if v, aok := accept(current); aok {
-					return v
+					return v, nil
 				}
 
-				exitNoInput()
+				return "", errNoInput()
 			}
 
 			switch {
 			case ans == "" || strings.EqualFold(ans, "Y"):
 				if v, aok := accept(current); aok {
-					return v
+					return v, nil
 				}
 				// invalid: fall through to manual entry
 
@@ -115,7 +118,7 @@ func promptValue(prompt, current string, validate func(string) error) string {
 
 		val, ok := readLine()
 		if !ok {
-			exitNoInput()
+			return "", errNoInput()
 		}
 
 		if val == "" {
@@ -124,7 +127,7 @@ func promptValue(prompt, current string, validate func(string) error) string {
 		}
 
 		if v, aok := accept(val); aok {
-			return v
+			return v, nil
 		}
 	}
 }
@@ -134,8 +137,19 @@ func SetupCert(cfg *config.Config) error {
 	internal.PrintYellow("正在申请 TLS 证书...")
 
 	oldDomain, oldEmail := cfg.Domain, cfg.Email
-	cfg.Domain = promptValue("域名", cfg.Domain, validateDomain)
-	cfg.Email = promptValue("邮箱", cfg.Email, validateEmail)
+
+	domain, err := promptValue("域名", cfg.Domain, validateDomain)
+	if err != nil {
+		return fmt.Errorf("读取证书域名: %w", err)
+	}
+
+	email, err := promptValue("邮箱", cfg.Email, validateEmail)
+	if err != nil {
+		return fmt.Errorf("读取证书邮箱: %w", err)
+	}
+
+	cfg.Domain = domain
+	cfg.Email = email
 
 	if cfg.Domain != oldDomain || cfg.Email != oldEmail {
 		if err := config.SaveConfig(cfg); err != nil {
@@ -248,6 +262,8 @@ func ensureAcmeSh() error {
 	for _, m := range installMethods {
 		internal.PrintYellow("尝试%s...", m.name)
 
+		// Each acme.sh fallback is either piped or compound (`&&`, `cd`), so this
+		// remains shell-backed while simple service/package calls use argv.
 		if _, err := internal.ExecCommand("bash", "-c", m.cmd); err != nil {
 			internal.PrintYellow("%s失败: %v", m.name, err)
 

@@ -34,7 +34,7 @@ sudo ./xrayctl --install --domain example.com
 sudo ./xrayctl --status
 ```
 
-`cli.ParseFlags` returns `false` when `os.Args` has no flags; `main` then falls through to `cli.ShowMenu`. This is why adding a new flag requires updating `cli/flags.go` only — the menu is a separate code path in `cli/menu.go`.
+`cli.ParseFlags` returns `-1` when `os.Args` has no flags (`main` then falls through to `cli.ShowMenu`), `0` on success, or `1` on action failure. This is why adding a new flag requires updating `cli/flags.go` only — the menu is a separate code path in `cli/menu.go`.
 
 ## Architecture
 
@@ -56,7 +56,7 @@ Four-package layout, strict one-way dependency graph `cmd → cli → {config, s
   - `cert.go` — installs `acme.sh` (4 fallback install methods) and issues a Let's Encrypt cert via `--standalone`, which **stops nginx** for port 80 and restarts it on exit. Writes to `cfg.CertDir/{xray.crt,xray.key}`.
   - `nginx.go` — rewrites `/etc/nginx/nginx.conf` (main) and `cfg.NginxConfig` (vless fallback on `127.0.0.1:<NginxPort>` with `proxy_protocol`). Runs `nginx -t` before restart.
   - `warp.go` — adds Cloudflare apt repo, registers, sets `warp-cli mode proxy` on `cfg.WARPPort`, verifies by fetching public IP through the SOCKS proxy.
-  - `xray.go` — installs via upstream `install-release.sh`; `buildXrayConfigJSON` emits the Xray config as a string (inbound on `cfg.XrayPort` with VLESS+XTLS-Vision, fallback to the nginx port, outbounds `direct`+`warp`, routing rules generated from `cfg.RouteDomains`). UUID precedence: `cfg.UUID` → extracted from existing on-disk config → MD5-of-email derived → random.
+  - `xray.go` — installs via upstream `install-release.sh`; `buildXrayConfigJSON` emits the Xray config as a string (inbound on `cfg.XrayPort` with VLESS+XTLS-Vision, fallback to the nginx port, outbounds `direct`+`warp`, routing rules generated from `cfg.RouteDomains`). UUID precedence: `cfg.UUID` → extracted from existing on-disk config → random UUID.
   - `health.go`, `backup.go`, `uninstall.go` — self-evident; `Backup` tars the config + cert paths into `xrayctl-backup-<ts>.tar.gz` in CWD.
 
 The install pipeline (menu option 1 and `--install`) is a fixed sequence and order matters: `InstallBase → SetupCert → SetupNginx → SetupWarp → SetupXray → CheckStatus`. Cert issuance must precede nginx setup because acme.sh standalone binds :80 itself.

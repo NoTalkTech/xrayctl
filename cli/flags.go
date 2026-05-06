@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -11,13 +12,17 @@ import (
 	"xrayctl/service"
 )
 
-// ParseFlags 解析命令行参数；无参数时返回 false 以便 main 回落到交互菜单。
-func ParseFlags() bool {
+// ParseFlags 解析命令行参数。
+// 返回 -1 表示应显示交互菜单，0 表示成功，1 表示失败。
+//
+//nolint:funlen,gocyclo // flag 定义和校验导致行数和复杂度偏高
+func ParseFlags() int {
 	var (
 		install     = flag.Bool("install", false, "一键完整安装所有组件")
 		domain      = flag.String("domain", "", "指定域名")
 		uuid        = flag.String("uuid", "", "指定UUID")
 		email       = flag.String("email", "", "指定证书申请邮箱 (acme.sh 注册用)")
+		check       = flag.Bool("check", false, "只读预检环境与服务状态")
 		status      = flag.Bool("status", false, "查看运行状态")
 		restartWarp = flag.Bool("restart-warp", false, "重启WARP代理")
 		updateXray  = flag.Bool("update-xray", false, "更新Xray核心")
@@ -31,7 +36,7 @@ func ParseFlags() bool {
 
 	// 没有任何参数：回到交互菜单
 	if len(os.Args) <= 1 {
-		return false
+		return -1
 	}
 
 	if !internal.IsRoot() {
@@ -45,6 +50,7 @@ func ParseFlags() bool {
 		name string
 	}{
 		{*install, "--install"},
+		{*check, "--check"},
 		{*status, "--status"},
 		{*restartWarp, "--restart-warp"},
 		{*updateXray, "--update-xray"},
@@ -66,8 +72,13 @@ func ParseFlags() bool {
 		os.Exit(1)
 	}
 
-	cfg, err := config.LoadConfig()
+	cfg, err := loadConfigForFlagAction(*check)
 	if err != nil {
+		if *check {
+			internal.PrintRed("检查模式无法加载配置: %v", err)
+			return 1
+		}
+
 		cfg = config.DefaultConfig()
 	}
 
@@ -89,7 +100,9 @@ func ParseFlags() bool {
 		dirty = true
 	}
 
-	if dirty {
+	if dirty && *check {
+		internal.PrintYellow("检查模式仅使用命令行配置覆盖，不写入配置文件")
+	} else if dirty {
 		if err := config.SaveConfig(cfg); err != nil {
 			internal.PrintYellow("保存配置失败: %v", err)
 		}
@@ -103,84 +116,97 @@ func ParseFlags() bool {
 			fmt.Fprintln(os.Stderr, "未指定任何操作，使用 -h 查看帮助")
 		}
 
-		return true
+		return 0
 	}
 
-	executeFlagAction(cfg, *install, *status, *restartWarp, *updateXray, *renewCert, *backup, *restore, *uninstall)
+	if err := executeFlagAction(
+		cfg, *install, *check, *status, *restartWarp,
+		*updateXray, *renewCert, *backup, *restore, *uninstall,
+	); err != nil {
+		internal.PrintRed("操作失败: %v", err)
 
-	return true
+		return 1
+	}
+
+	return 0
+}
+
+func loadConfigForFlagAction(check bool) (*config.Config, error) {
+	if check {
+		return config.LoadConfigReadOnly()
+	}
+
+	return config.LoadConfig()
 }
 
 // executeFlagAction runs the action corresponding to the parsed flags,
 // checking errors on every service call.
 func executeFlagAction(
 	cfg *config.Config,
-	install, status, restartWarp, updateXray, renewCert, backup bool,
+	install, check, status, restartWarp, updateXray, renewCert, backup bool,
 	restore string,
 	uninstall bool,
-) {
+) error {
 	switch {
 	case install:
 		internal.PrintGreen("开始一键安装...")
 
-		if err := service.InstallBase(); err != nil {
-			internal.PrintRed("安装基础依赖失败: %v", err)
-			break
+		if err := service.InstallAll(cfg); err != nil {
+			return fmt.Errorf("一键安装失败: %w", err)
 		}
 
-		if err := service.SetupCert(cfg); err != nil {
-			internal.PrintRed("证书配置失败: %v", err)
-			break
+	case check:
+		if err := runPreflightCheck(cfg); err != nil {
+			return fmt.Errorf("预检失败: %w", err)
+		} else {
+			internal.PrintGreen("预检通过")
 		}
-
-		if err := service.SetupNginx(cfg); err != nil {
-			internal.PrintRed("Nginx配置失败: %v", err)
-			break
-		}
-
-		if err := service.SetupWarp(cfg); err != nil {
-			internal.PrintRed("WARP配置失败: %v", err)
-			break
-		}
-
-		if err := service.SetupXray(cfg); err != nil {
-			internal.PrintRed("Xray配置失败: %v", err)
-			break
-		}
-
-		service.CheckStatus(cfg)
 
 	case status:
-		service.CheckStatus(cfg)
+		renderStatus(cfg)
 
 	case restartWarp:
 		if err := service.RestartWarp(cfg); err != nil {
-			internal.PrintRed("WARP重启失败: %v", err)
+			return fmt.Errorf("重启WARP失败: %w", err)
 		}
 
-		service.CheckStatus(cfg)
+		renderStatus(cfg)
 
 	case updateXray:
 		if err := service.SetupXray(cfg); err != nil {
-			internal.PrintRed("Xray更新失败: %v", err)
+			return fmt.Errorf("更新Xray失败: %w", err)
 		}
 
 	case renewCert:
 		if err := service.SetupCert(cfg); err != nil {
-			internal.PrintRed("证书续签失败: %v", err)
+			return fmt.Errorf("证书续签失败: %w", err)
 		}
 
 	case backup:
 		if err := service.Backup(cfg); err != nil {
-			internal.PrintRed("备份失败: %v", err)
+			return fmt.Errorf("备份失败: %w", err)
 		}
 
 	case restore != "":
 		if err := service.Restore(restore); err != nil {
-			internal.PrintRed("恢复失败: %v", err)
+			return fmt.Errorf("恢复失败: %w", err)
 		}
 
 	case uninstall:
-		service.Uninstall()
+		if err := service.Uninstall(); err != nil {
+			return fmt.Errorf("卸载失败: %w", err)
+		}
 	}
+
+	return nil
+}
+
+func runPreflightCheck(cfg *config.Config) error {
+	environmentReport := service.CollectEnvironmentReport(cfg)
+	service.PrintEnvironmentReport(environmentReport)
+
+	statusReport := service.CollectStatus(cfg)
+	service.PrintStatusReport(statusReport)
+
+	return errors.Join(environmentReport.ValidationError(), statusReport.ValidationError())
 }

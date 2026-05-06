@@ -9,24 +9,24 @@ type Config struct {
 	Email  string `yaml:"email"` // 证书申请用邮箱
 
 	// 路径配置
-	CertDir     string `default:"/usr/local/etc/xray/cert"        yaml:"cert_dir"`
-	XrayConfig  string `default:"/usr/local/etc/xray/config.json" yaml:"xray_config"`
-	NginxConfig string `default:"/etc/nginx/conf.d/vless.conf"    yaml:"nginx_config"`
+	CertDir     string `yaml:"cert_dir"`
+	XrayConfig  string `yaml:"xray_config"`
+	NginxConfig string `yaml:"nginx_config"`
 
 	// 端口配置
-	WARPPort  int `default:"40000" yaml:"warp_port"`
-	XrayPort  int `default:"443"   yaml:"xray_port"`
-	NginxPort int `default:"8080"  yaml:"nginx_port"`
+	WARPPort  int `yaml:"warp_port"`
+	XrayPort  int `yaml:"xray_port"`
+	NginxPort int `yaml:"nginx_port"`
 
 	// 分流配置
 	RouteDomains []string `yaml:"route_domains"` // 需要走WARP的域名列表
 
 	// 伪装配置
-	FallbackURL string `default:"https://biyuhuang.github.io/WallaceHuangBlog" yaml:"fallback_url"`
+	FallbackURL string `yaml:"fallback_url"`
 
 	// Nginx配置
-	NginxUser            string `default:"nginx" yaml:"nginx_user"`
-	NginxWorkerProcesses string `default:"auto"  yaml:"nginx_worker_processes"`
+	NginxUser            string `yaml:"nginx_user"`
+	NginxWorkerProcesses string `yaml:"nginx_worker_processes"`
 }
 
 // DefaultConfig 返回默认配置.
@@ -44,5 +44,7 @@ func DefaultConfig() *Config {
 			"x.ai", "grok.com", "x.com", "anthropic.com", "claude.ai",
 			"bing.com", "edgeservices.bing.com",
 		},
+		NginxUser:            "nginx",
+		NginxWorkerProcesses: "auto",
 	}
 }

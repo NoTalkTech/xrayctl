@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"runtime"
@@ -15,6 +16,8 @@ const (
 	warpAptSourcesList = "/etc/apt/sources.list.d/cloudflare-client.list"
 	warpGPGKeyring     = "/usr/share/keyrings/cloudflare-warp.gpg"
 )
+
+var warpCommandExists = internal.CommandExists
 
 // warpAptRepoLine builds the single-line apt source entry for the Cloudflare
 // WARP repo, pinned to the given distro codename.
@@ -36,22 +39,53 @@ func warpRPMURL(rhelVersion, goarch string) (string, error) {
 
 // SetupWarp 安装配置WARP代理.
 func SetupWarp(cfg *config.Config) error {
+	return SetupWarpContext(context.Background(), cfg)
+}
+
+// SetupWarpContext installs and configures WARP using ctx for runner-backed
+// shell-outs. Existing callers use SetupWarp for the background-context default.
+func SetupWarpContext(ctx context.Context, cfg *config.Config) error {
+	return setupWarp(ctx, cfg, internal.DefaultRunner)
+}
+
+func setupWarp(ctx context.Context, cfg *config.Config, runner internal.CommandRunner) error {
+	ctx = backgroundIfNil(ctx)
+
 	internal.PrintYellow("正在部署 Cloudflare WARP 出口...")
 
-	if !internal.CommandExists("warp-cli") {
-		if err := installWarp(); err != nil {
+	if !warpCommandExists("warp-cli") {
+		if err := installWarp(ctx, runner); err != nil {
 			return err
 		}
 	}
 
-	if status := internal.ServiceStatus(internal.ServiceWarp); status != internal.StatusActive {
+	statusOut, statusErr := runner.RunSilent(ctx, "systemctl", "is-active", internal.ServiceWarp)
+	status := strings.TrimSpace(statusOut)
+
+	if statusErr != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+
+		if status == "" {
+			status = internal.StatusInactive
+		}
+	}
+
+	if status != internal.StatusActive {
 		internal.PrintYellow("启动 warp-svc 守护进程...")
 
-		if _, err := internal.ExecCommandWithSudo("systemctl", "start", internal.ServiceWarp); err != nil {
+		if _, err := runner.RunWithSudo(ctx, "systemctl", "start", internal.ServiceWarp); err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return ctxErr
+			}
+
 			internal.PrintYellow("启动warp-svc失败: %v", err)
 		}
 
-		time.Sleep(3 * time.Second)
+		if err := sleepWithContext(ctx, 3*time.Second); err != nil {
+			return err
+		}
 	}
 
 	// `warp-cli registration new` prompts Y/N on a TTY to accept TOS; piping
@@ -63,27 +97,46 @@ func SetupWarp(cfg *config.Config) error {
 	// We don't error out on a non-zero exit: the common case is "already
 	// registered" which returns non-zero, and the next mandatory step
 	// (`warp-cli mode proxy`) will surface any real problem.
-	if _, err := internal.ExecCommand("sh", "-c",
+	if _, err := runner.Run(ctx, "sh", "-c",
 		`echo "y" | script -q -c "warp-cli registration new" /dev/null 2>&1`); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+
 		internal.PrintYellow("WARP 注册步骤跳过 (已注册或暂时失败，后续命令会再验证)")
 	}
 
-	if _, err := internal.ExecCommand("warp-cli", "mode", "proxy"); err != nil {
+	if _, err := runner.Run(ctx, "warp-cli", "mode", "proxy"); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+
 		internal.PrintRed("设置WARP代理模式失败: %v", err)
+
 		return err
 	}
 
-	if _, err := internal.ExecCommand("warp-cli", "proxy", "port", fmt.Sprintf("%d", cfg.WARPPort)); err != nil {
+	if _, err := runner.Run(ctx, "warp-cli", "proxy", "port", fmt.Sprintf("%d", cfg.WARPPort)); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+
 		internal.PrintRed("设置WARP端口失败: %v", err)
+
 		return err
 	}
 
-	if _, err := internal.ExecCommand("warp-cli", "connect"); err != nil {
+	if _, err := runner.Run(ctx, "warp-cli", "connect"); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+
 		internal.PrintRed("WARP启动失败: %v", err)
+
 		return err
 	}
 
-	ip, err := internal.GetWarpIP(cfg.WARPPort)
+	ip, err := internal.GetWarpIPContext(ctx, cfg.WARPPort)
 	if err != nil {
 		internal.PrintRed("WARP连通性测试失败: %v", err)
 		return err
@@ -97,30 +150,45 @@ func SetupWarp(cfg *config.Config) error {
 // installWarp adds the Cloudflare apt/rpm repo and installs the cloudflare-warp
 // package. It dispatches by package manager: apt on Debian/Ubuntu, rpm on
 // RHEL-family hosts.
-func installWarp() error {
+func installWarp(ctx context.Context, runner internal.CommandRunner) error {
+	ctx = backgroundIfNil(ctx)
+
 	// The GPG fetch genuinely needs a pipe between two processes; the URL is
-	// a literal so there's no shell-injection surface.
-	if _, err := internal.ExecCommand("bash", "-c",
+	// a literal so there's no shell-injection surface. The runner uses
+	// exec.CommandContext, so cancellation still stops the launched shell.
+	if _, err := runner.Run(ctx, "bash", "-c",
 		"curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | gpg --yes --dearmor -o "+warpGPGKeyring); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+
 		internal.PrintRed("添加WARP GPG密钥失败: %v", err)
+
 		return err
 	}
 
 	switch {
-	case internal.CommandExists("apt"):
-		return installWarpApt()
-	case internal.CommandExists("yum") || internal.CommandExists("dnf"):
-		return installWarpRPM()
+	case warpCommandExists("apt"):
+		return installWarpApt(ctx, runner)
+	case warpCommandExists("yum") || warpCommandExists("dnf"):
+		return installWarpRPM(ctx, runner)
 	default:
 		internal.PrintRed("未找到支持的包管理器（apt/yum/dnf）")
 		return fmt.Errorf("no supported package manager found")
 	}
 }
 
-func installWarpApt() error {
-	codenameOut, err := internal.ExecCommand("lsb_release", "-cs")
+func installWarpApt(ctx context.Context, runner internal.CommandRunner) error {
+	ctx = backgroundIfNil(ctx)
+
+	codenameOut, err := runner.Run(ctx, "lsb_release", "-cs")
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+
 		internal.PrintRed("读取发行版代号失败: %v", err)
+
 		return err
 	}
 
@@ -135,25 +203,42 @@ func installWarpApt() error {
 		return err
 	}
 
-	if _, err := internal.ExecCommandWithSudo("apt", "update"); err != nil {
+	if _, err := runner.RunWithSudo(ctx, "apt", "update"); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+
 		internal.PrintRed("apt update 失败: %v", err)
+
 		return err
 	}
 
-	if _, err := internal.ExecCommandWithSudo("apt", "install", "-y", "cloudflare-warp"); err != nil {
+	if _, err := runner.RunWithSudo(ctx, "apt", "install", "-y", "cloudflare-warp"); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+
 		internal.PrintRed("WARP安装失败: %v", err)
+
 		return err
 	}
 
 	return nil
 }
 
-func installWarpRPM() error {
+func installWarpRPM(ctx context.Context, runner internal.CommandRunner) error {
+	ctx = backgroundIfNil(ctx)
+
 	// `rpm -E %rhel` prints the major RHEL version (e.g. "9"). We resolve it
 	// here instead of relying on shell $() expansion inside an argv element.
-	rhelOut, err := internal.ExecCommand("rpm", "-E", "%rhel")
+	rhelOut, err := runner.Run(ctx, "rpm", "-E", "%rhel")
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+
 		internal.PrintRed("读取RHEL版本失败: %v", err)
+
 		return err
 	}
 
@@ -168,12 +253,37 @@ func installWarpRPM() error {
 		return err
 	}
 
-	if _, err := internal.ExecCommand("rpm", "-ivh", url); err != nil {
+	if _, err := runner.Run(ctx, "rpm", "-ivh", url); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+
 		internal.PrintRed("WARP安装失败: %v", err)
+
 		return err
 	}
 
 	return nil
+}
+
+func backgroundIfNil(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+
+	return ctx
+}
+
+func sleepWithContext(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 // RestartWarp 重启WARP.

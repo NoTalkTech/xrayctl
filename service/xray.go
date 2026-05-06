@@ -1,7 +1,6 @@
 package service
 
 import (
-	"crypto/md5" //nolint:gosec // MD5 used only for deterministic UUID generation, not security
 	"encoding/json"
 	"fmt"
 
@@ -112,6 +111,8 @@ func SetupXray(cfg *config.Config) error {
 	}
 
 	if !internal.CommandExists("xray") {
+		// The upstream installer is distributed as a script stream into bash; keep
+		// this shell-backed while simple package/service calls use argv directly.
 		_, err := internal.ExecCommand("bash", "-c",
 			"curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh | bash -s -- install")
 		if err != nil {
@@ -120,17 +121,7 @@ func SetupXray(cfg *config.Config) error {
 		}
 	}
 
-	oldUUID := extractExistingUUID(cfg.XrayConfig)
-
-	uuid := cfg.UUID
-	if uuid == "" {
-		uuid = oldUUID
-	}
-
-	if uuid == "" {
-		uuid = generateUUIDFromEmail(cfg.Email)
-	}
-
+	uuid := resolveXrayUUID(cfg, internal.GenerateUUID)
 	cfg.UUID = uuid
 
 	if err := config.SaveConfig(cfg); err != nil {
@@ -185,6 +176,18 @@ func extractExistingUUID(path string) string {
 	}
 
 	return parsed.Inbounds[0].Settings.Clients[0].ID
+}
+
+func resolveXrayUUID(cfg *config.Config, generateUUID func() string) string {
+	if cfg.UUID != "" {
+		return cfg.UUID
+	}
+
+	if uuid := extractExistingUUID(cfg.XrayConfig); uuid != "" {
+		return uuid
+	}
+
+	return generateUUID()
 }
 
 // buildXrayConfigJSON builds the Xray configuration JSON text for cfg+uuid.
@@ -262,18 +265,4 @@ func buildXrayRoutingRules(warpDomains []string) []XrayRoutingRule {
 // XrayStatus 获取Xray运行状态.
 func XrayStatus() string {
 	return internal.ServiceStatus(internal.ServiceXray)
-}
-
-// generateUUIDFromEmail returns a deterministic RFC 4122 v3-shaped UUID
-// derived from the MD5 of email. Empty email falls back to a random UUID.
-func generateUUIDFromEmail(email string) string {
-	if email == "" {
-		return internal.GenerateUUID()
-	}
-
-	h := md5.Sum([]byte(email)) //nolint:gosec // UUID derivation, not security use
-	h[6] = (h[6] & 0x0f) | 0x30 // version 3 (MD5 name-based)
-	h[8] = (h[8] & 0x3f) | 0x80 // RFC 4122 variant
-
-	return fmt.Sprintf("%x-%x-%x-%x-%x", h[0:4], h[4:6], h[6:8], h[8:10], h[10:16])
 }

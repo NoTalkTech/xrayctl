@@ -20,8 +20,10 @@ var (
 )
 
 // fetchIP 公共IP获取函数.
-func fetchIP(client *http.Client) (string, error) {
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, IPCheckURL, http.NoBody)
+func fetchIP(ctx context.Context, client *http.Client) (string, error) {
+	ctx = contextOrBackground(ctx)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, IPCheckURL, http.NoBody)
 	if err != nil {
 		return "", err
 	}
@@ -43,11 +45,18 @@ func fetchIP(client *http.Client) (string, error) {
 
 // GetPublicIP 获取公网IP.
 func GetPublicIP() (string, error) {
-	return fetchIP(defaultClient)
+	return fetchIP(context.Background(), defaultClient)
 }
 
 // GetWarpIP 通过WARP代理获取出口IP.
 func GetWarpIP(port int) (string, error) {
+	return GetWarpIPContext(context.Background(), port)
+}
+
+// GetWarpIPContext 通过WARP代理获取出口IP，并允许调用方取消HTTP探测.
+func GetWarpIPContext(ctx context.Context, port int) (string, error) {
+	ctx = contextOrBackground(ctx)
+
 	proxyURL, err := url.Parse(fmt.Sprintf("socks5://127.0.0.1:%d", port))
 	if err != nil {
 		return "", err
@@ -60,7 +69,7 @@ func GetWarpIP(port int) (string, error) {
 		},
 	}
 
-	return fetchIP(client)
+	return fetchIP(ctx, client)
 }
 
 // PortOpen 检测端口是否开放.
@@ -79,4 +88,12 @@ func PortOpen(port int) bool {
 	_ = resp.Body.Close() //nolint:errcheck // best-effort body close in port check
 
 	return true
+}
+
+func contextOrBackground(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+
+	return ctx
 }

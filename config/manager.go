@@ -3,7 +3,6 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"reflect"
 
 	"gopkg.in/yaml.v3"
 )
@@ -11,48 +10,86 @@ import (
 // ConfigPath 配置文件路径，可修改用于测试.
 var ConfigPath = DefaultConfigPath
 
-// fillDefaults 自动填充空字段为默认值.
-func fillDefaults(cfg, defaultCfg *Config) {
-	cfgVal := reflect.ValueOf(cfg).Elem()
-	defaultVal := reflect.ValueOf(defaultCfg).Elem()
+// ApplyDefaults fills unset configuration fields with the built-in defaults.
+func ApplyDefaults(cfg *Config) {
+	if cfg == nil {
+		return
+	}
 
-	for i := 0; i < cfgVal.NumField(); i++ {
-		field := cfgVal.Field(i)
-		if field.IsZero() {
-			field.Set(defaultVal.Field(i))
-		}
+	defaultCfg := DefaultConfig()
+
+	applyStringDefault(&cfg.CertDir, defaultCfg.CertDir)
+	applyStringDefault(&cfg.XrayConfig, defaultCfg.XrayConfig)
+	applyStringDefault(&cfg.NginxConfig, defaultCfg.NginxConfig)
+	applyIntDefault(&cfg.WARPPort, defaultCfg.WARPPort)
+	applyIntDefault(&cfg.XrayPort, defaultCfg.XrayPort)
+	applyIntDefault(&cfg.NginxPort, defaultCfg.NginxPort)
+
+	if cfg.RouteDomains == nil {
+		cfg.RouteDomains = defaultCfg.RouteDomains
+	}
+
+	applyStringDefault(&cfg.FallbackURL, defaultCfg.FallbackURL)
+	applyStringDefault(&cfg.NginxUser, defaultCfg.NginxUser)
+	applyStringDefault(&cfg.NginxWorkerProcesses, defaultCfg.NginxWorkerProcesses)
+}
+
+func applyStringDefault(field *string, value string) {
+	if *field == "" {
+		*field = value
 	}
 }
 
-// LoadConfig 加载配置文件，如果不存在则返回默认配置.
-func LoadConfig() (*Config, error) {
-	defaultCfg := DefaultConfig()
+func applyIntDefault(field *int, value int) {
+	if *field == 0 {
+		*field = value
+	}
+}
 
+// LoadConfig 加载配置文件，如果不存在则返回默认配置并尝试持久化.
+func LoadConfig() (*Config, error) {
+	cfg, missing, err := loadConfigFromDisk()
+	if err != nil {
+		return nil, err
+	}
+
+	if missing {
+		if err := SaveConfig(cfg); err != nil {
+			return cfg, nil //nolint:nilerr // 保存失败也返回默认配置
+		}
+	}
+
+	return cfg, nil
+}
+
+// LoadConfigReadOnly loads configuration without creating or modifying files.
+func LoadConfigReadOnly() (*Config, error) {
+	cfg, _, err := loadConfigFromDisk()
+
+	return cfg, err
+}
+
+func loadConfigFromDisk() (*Config, bool, error) {
 	// 检查配置文件是否存在
 	if _, err := os.Stat(ConfigPath); os.IsNotExist(err) {
-		// 尝试保存默认配置
-		if err := SaveConfig(defaultCfg); err != nil {
-			return defaultCfg, nil //nolint:nilerr // 保存失败也返回默认配置
-		}
-
-		return defaultCfg, nil
+		return DefaultConfig(), true, nil
 	}
 
 	// 读取配置文件
 	data, err := os.ReadFile(ConfigPath)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	// 填充默认值
-	fillDefaults(&cfg, defaultCfg)
+	ApplyDefaults(&cfg)
 
-	return &cfg, nil
+	return &cfg, false, nil
 }
 
 // SaveConfig 保存配置到文件。配置含 UUID 等敏感字段，所以目录 0700 / 文件 0600，
