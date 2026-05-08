@@ -18,7 +18,7 @@ func TestValidateTarForRootExtractionAcceptsNormalBackupPaths(t *testing.T) {
 		{name: "usr/local/etc/xray/cert/xray.crt", body: "cert"},
 	})
 
-	if err := validateTarForRootExtraction(archive); err != nil {
+	if err := validateTarForRootExtraction(archive, safeRestorePrefixes, nil); err != nil {
 		t.Fatalf("validateTarForRootExtraction returned error: %v", err)
 	}
 }
@@ -32,7 +32,7 @@ func TestValidateTarForRootExtractionAcceptsDirectoryEntries(t *testing.T) {
 		{name: "etc/xrayctl/config.yaml", body: "uuid: abc\n"},
 	})
 
-	if err := validateTarForRootExtraction(archive); err != nil {
+	if err := validateTarForRootExtraction(archive, safeRestorePrefixes, nil); err != nil {
 		t.Fatalf("validateTarForRootExtraction returned error for tar with dir entries: %v", err)
 	}
 }
@@ -74,7 +74,7 @@ func TestValidateTarForRootExtractionRejectsUnsafePaths(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			archive := writeTarGz(t, []testTarEntry{tc.entry})
 
-			err := validateTarForRootExtraction(archive)
+			err := validateTarForRootExtraction(archive, safeRestorePrefixes, nil)
 			if err == nil {
 				t.Fatal("validateTarForRootExtraction returned nil, want error")
 			}
@@ -91,12 +91,96 @@ func TestValidateTarForRootExtractionRejectsPathsThroughArchiveSymlink(t *testin
 		{name: "etc/xrayctl/link/config.yaml", body: "uuid: abc\n"},
 	})
 
-	err := validateTarForRootExtraction(archive)
+	err := validateTarForRootExtraction(archive, safeRestorePrefixes, nil)
 	if err == nil {
 		t.Fatal("validateTarForRootExtraction returned nil, want archive symlink traversal error")
 	}
 	if !strings.Contains(err.Error(), "traverses archive symlink") {
 		t.Fatalf("error = %q, want archive symlink traversal context", err)
+	}
+}
+
+
+func TestValidateTarRejectsHardlinkToUnpermittedTarget(t *testing.T) {
+	archive := writeHardlinkTarGz(t, "etc/xrayctl/link", "etc/passwd")
+	err := validateTarForRootExtraction(archive, safeRestorePrefixes, nil)
+	if err == nil {
+		t.Fatal("validateTarForRootExtraction returned nil, want hardlink target prefix error")
+	}
+	if !strings.Contains(err.Error(), "not in permitted restore paths") {
+		t.Fatalf("error = %q, want hardlink target prefix error", err)
+	}
+}
+
+func TestDirToArchivePrefix(t *testing.T) {
+	cases := []struct {
+		path string
+		want string
+	}{
+		{"/etc/xrayctl/", "etc/xrayctl/"},
+		{"/etc/xrayctl", "etc/xrayctl/"},
+		{"/data/certs", "data/certs/"},
+		{"relative/path", ""},
+		{"/", ""},
+		{"", ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.path, func(t *testing.T) {
+			got := dirToArchivePrefix(tc.path)
+			if got != tc.want {
+				t.Fatalf("dirToArchivePrefix(%q) = %q, want %q", tc.path, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFileToArchivePath(t *testing.T) {
+	cases := []struct {
+		path string
+		want string
+	}{
+		{"/usr/local/etc/xray/config.json", "usr/local/etc/xray/config.json"},
+		{"/data/certs/xray.crt", "data/certs/xray.crt"},
+		{"/etc/xray.json", "etc/xray.json"},
+		{"relative/path", ""},
+		{"/", ""},
+		{"", ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.path, func(t *testing.T) {
+			got := fileToArchivePath(tc.path)
+			if got != tc.want {
+				t.Fatalf("fileToArchivePath(%q) = %q, want %q", tc.path, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestValidateTarForRootExtractionAcceptsExactFilePaths(t *testing.T) {
+	archive := writeTarGz(t, []testTarEntry{
+		{name: "etc/xray.json", body: `{"log": {}}`},
+	})
+
+	err := validateTarForRootExtraction(archive, nil, []string{"etc/xray.json"})
+	if err != nil {
+		t.Fatalf("expected no error for exact allowed path, got: %v", err)
+	}
+}
+
+func TestValidateTarForRootExtractionRejectsParentDirWhenOnlyExactFileAllowed(t *testing.T) {
+	archive := writeTarGz(t, []testTarEntry{
+		{name: "etc/xray.json", body: `{"log": {}}`},
+		{name: "etc/passwd", body: "root:x:0:0:"},
+	})
+
+	err := validateTarForRootExtraction(archive, nil, []string{"etc/xray.json"})
+	if err == nil {
+		t.Fatal("expected error for etc/passwd outside exact paths")
+	}
+	if !strings.Contains(err.Error(), "not in permitted restore paths") {
+		t.Fatalf("error = %q, want path rejection for etc/passwd", err)
 	}
 }
 
@@ -141,6 +225,32 @@ type testTarEntry struct {
 	body     string
 	linkname string
 	dir      bool
+	hardlink bool
+}
+
+
+func writeHardlinkTarGz(t *testing.T, name, linkname string) string {
+	t.Helper()
+	path := t.TempDir() + "/hardlink.tar.gz"
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	gz := gzip.NewWriter(file)
+	tw := tar.NewWriter(gz)
+	hdr := &tar.Header{
+		Name:     name,
+		Mode:     0o600,
+		Typeflag: tar.TypeLink,
+		Linkname: linkname,
+	}
+	if err := tw.WriteHeader(hdr); err != nil {
+		t.Fatalf("write header: %v", err)
+	}
+	tw.Close()
+	gz.Close()
+	file.Close()
+	return path
 }
 
 func writeTarGz(t *testing.T, entries []testTarEntry) string {

@@ -1,13 +1,13 @@
 <claude-mem-context>
 # Memory Context
 
-# [xrayctl] recent context, 2026-05-06 3:59pm GMT+8
+# [xrayctl] recent context, 2026-05-08 2:31pm GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (14,235t read) | 295,713t work | 95% savings
+Stats: 50 obs (13,201t read) | 334,294t work | 96% savings
 
 ### Apr 28, 2026
 S471 Codex CLI rescue session initiated for OPTIMIZATION.md review against latest xrayctl codebase (Apr 28 at 12:20 PM)
@@ -21,13 +21,7 @@ S498 TASK_BREAKDOWN.md Phase 2 tasks expanded with scope boundaries and done-whe
 S501 OPTIMIZATION_PLAN.md review via GPT-5.5 (codex:rescue) — applying Codex's review findings to finalize plan documents before Phase 1 implementation (Apr 29 at 12:11 PM)
 S508 Task 7 acceptance criteria converted to Chinese in TASK_BREAKDOWN.md (Apr 29 at 12:11 PM)
 S510 Create a new git feature branch, commit, and push planning documents in the xrayctl repository (Apr 29 at 2:05 PM)
-2369 4:23p 🔵 Task 9 research complete — existing CollectEnvironmentReport and CollectStatus reusable for --check flag
-2371 4:26p 🔵 Task 10 Maintenance Hardening codebase survey completed
-2372 4:27p 🔵 Task 10 codebase reading completed with specific hardening gap locations
-2373 4:28p 🔵 bash -c audit completed — 7 shell call sites identified across xrayctl service/ package
-2374 4:29p 🔵 Task 10 Maintenance Hardening queued without observed execution
-2375 4:30p 🔄 Reflection-based fillDefaults replaced with explicit ApplyDefaults in config/manager.go
-2376 " 🔄 bash -c package install replaced with argv calls in service/base.go
+2376 4:30p 🔄 bash -c package install replaced with argv calls in service/base.go
 2377 " 🔄 BBR sysctl bash append replaced with idempotent file merge in service/base.go
 2378 4:32p 🔄 Task 10 Maintenance Hardening — bash -c audit in service/base.go completed
 2379 " 🔄 Task 10 Maintenance Hardening — BBR sysctl idempotency in service/base.go completed
@@ -71,6 +65,13 @@ S510 Create a new git feature branch, commit, and push planning documents in the
 2422 " 🔵 Three bash shell call site patterns identified across xrayctl service package
 2423 " 🔄 gofmt applied across five xrayctl files confirming active modification state
 2424 " ⚖️ Three core skills confirmed for spp-data-mart deployment workflow
+### May 7, 2026
+2517 10:28a 🔵 Code review fix session initiated for xrayctl repository
+2520 10:29a 🔵 GitHub CLI unavailable due to network connectivity issues
+2521 " 🔵 No code-review artifacts found locally or via GitHub API in sandbox
+2522 10:30a 🔵 Session reading codex memory to identify prior unresolved lint findings
+2523 " 🔵 No code-review findings source accessible in xrayctl sandbox
+2524 10:31a 🔵 Code-review findings source inaccessible for xrayctl fixes
 
-Access 296k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 334k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
