@@ -4,11 +4,13 @@ package service
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path"
 	"slices"
 	"strings"
@@ -69,13 +71,19 @@ func Backup(cfg *config.Config) error {
 func Restore(backupFile string) error {
 	internal.PrintYellow("正在从 %s 恢复...", backupFile)
 
-	if !internal.FileExists(backupFile) {
+	archiveBytes, err := os.ReadFile(backupFile) //nolint:gosec // user-selected restore archive must be read once
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("read backup archive: %w", err)
+		}
+
 		internal.PrintRed("备份文件不存在")
+
 		return fmt.Errorf("backup file not exist")
 	}
 
 	prefixes, exactPaths := restorePrefixes()
-	if err := validateTarForRootExtraction(backupFile, prefixes, exactPaths); err != nil {
+	if err := validateTarForRootExtraction(archiveBytes, prefixes, exactPaths); err != nil {
 		internal.PrintRed("备份文件不安全: %v", err)
 		return err
 	}
@@ -90,8 +98,7 @@ func Restore(backupFile string) error {
 	}
 
 	// 解压到根目录
-	_, err := internal.ExecCommand("tar", "-zxf", backupFile, "-C", "/")
-	if err != nil {
+	if err := restoreArchiveExtractor(archiveBytes); err != nil {
 		internal.PrintRed("恢复失败: %v", err)
 
 		if _, restartErr := internal.ExecCommandWithSudo("systemctl", startArgs...); restartErr != nil {
@@ -110,6 +117,32 @@ func Restore(backupFile string) error {
 	}
 
 	internal.PrintGreen("恢复完成，所有服务已重启")
+
+	return nil
+}
+
+var restoreArchiveExtractor = extractTarGzToRoot
+
+func extractTarGzToRoot(archiveBytes []byte) error {
+	cmd := exec.Command("tar", "-zxf", "-", "-C", "/")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdin = bytes.NewReader(archiveBytes)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	fmt.Println("[CMD] tar -zxf - -C /")
+
+	if err := cmd.Run(); err != nil {
+		if stderr.Len() > 0 {
+			fmt.Printf("[STDERR] %s\n", stderr.String())
+		}
+
+		return fmt.Errorf("extract backup archive: %w", err)
+	}
+
+	if stdout.Len() > 0 {
+		fmt.Printf("[STDOUT] %s\n", stdout.String())
+	}
 
 	return nil
 }
@@ -211,17 +244,8 @@ func fileToArchivePath(p string) string {
 	return clean[1:]
 }
 
-func validateTarForRootExtraction(backupFile string, prefixes, exactPaths []string) error {
-	f, err := os.Open(backupFile) //nolint:gosec // user-selected archive path must be opened for validation
-	if err != nil {
-		return fmt.Errorf("open backup archive: %w", err)
-	}
-
-	defer func() {
-		_ = f.Close() //nolint:errcheck // read-only validation cleanup
-	}()
-
-	gz, err := gzip.NewReader(f)
+func validateTarForRootExtraction(archiveBytes []byte, prefixes, exactPaths []string) error {
+	gz, err := gzip.NewReader(bytes.NewReader(archiveBytes))
 	if err != nil {
 		return fmt.Errorf("open gzip stream: %w", err)
 	}
