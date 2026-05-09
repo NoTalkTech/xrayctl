@@ -1,13 +1,13 @@
 <claude-mem-context>
 # Memory Context
 
-# [xrayctl] recent context, 2026-05-09 12:07pm GMT+8
+# [xrayctl] recent context, 2026-05-09 12:30pm GMT+8
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (13,682t read) | 496,390t work | 97% savings
+Stats: 50 obs (13,810t read) | 624,298t work | 98% savings
 
 ### Apr 28, 2026
 S471 Codex CLI rescue session initiated for OPTIMIZATION.md review against latest xrayctl codebase (Apr 28 at 12:20 PM)
@@ -21,16 +21,7 @@ S498 TASK_BREAKDOWN.md Phase 2 tasks expanded with scope boundaries and done-whe
 S501 OPTIMIZATION_PLAN.md review via GPT-5.5 (codex:rescue) — applying Codex's review findings to finalize plan documents before Phase 1 implementation (Apr 29 at 12:11 PM)
 S508 Task 7 acceptance criteria converted to Chinese in TASK_BREAKDOWN.md (Apr 29 at 12:11 PM)
 S510 Create a new git feature branch, commit, and push planning documents in the xrayctl repository (Apr 29 at 2:05 PM)
-2399 4:36p 🔵 config/manager.go ApplyDefaults already uses explicit field-by-field defaults
-2400 4:37p 🔄 Task 10 Maintenance Hardening — Phase 2 deferred work for xrayctl
-2401 " ✅ Default config test enhanced with Nginx field assertions
-2402 4:38p ✅ All Task 10 hardening tests pass across config and service packages
-2403 " 🔵 bash -c audit reveals 4 remaining shell call sites outside base.go
-2404 4:39p ✅ Xray installer shell call documented as intentional retention
-2405 " ✅ Acme.sh cert install shell calls documented as intentional retention
 2406 4:40p 🔵 config/manager.go ApplyDefaults already uses explicit defaults — no reflection to replace
-2407 " 🔄 BBR sysctl idempotency implemented in service/base.go
-2408 " 🔄 bash -c audit across xrayctl service package in progress
 2409 4:42p 🔄 Package manager string literals replaced with named constants in service/base.go
 2410 " ✅ Gosec lint annotations added for sysctl file operations in service/base.go
 2411 " 🟣 Task 10 Maintenance Hardening initiated for xrayctl Phase 2
@@ -74,6 +65,15 @@ S510 Create a new git feature branch, commit, and push planning documents in the
 2560 " 🔴 TOCTOU race window fixed in backup restore path
 2561 " 🔴 TOCTOU race window fixed in backup restore path
 2562 11:58a 🔴 TOCTOU race window fixed in backup restore path
+2564 12:08p 🔵 WARP install dispatch split (apt vs RPM) already in place, pending further decomposition
+2565 12:09p 🔵 Task requested: Refactor WARP install by package-manager family in service/warp.go
+2566 " 🔄 WARP install flow refactoring requested for service/warp.go
+2567 12:10p 🔄 WARP install setup refactored by package-manager family in service/warp.go
+2568 12:11p 🔄 WARP install setup package-manager family refactor requested
+2569 " 🔄 Initial WARP install refactor steps in progress for xrayctl
+2571 " 🔄 RHEL WARP install tests passing via alternative GOCACHE
+2572 " 🔄 WARP install setup refactored by package-manager family in xrayctl
+2573 12:12p 🔄 WARP install refactored into package-manager-specific helpers with RHEL dispatch tests
 
-Access 496k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 624k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
