@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -70,28 +69,23 @@ func (r *recorder) RunWithSudo(ctx context.Context, name string, args ...string)
 	return r.run(ctx, name, args...)
 }
 
-// TestInstallWarpRPMArgv exercises installWarpRPM end-to-end with a fake
-// runner, proving the shell-substitution bug is gone: the RHEL version is
-// resolved via a separate rpm -E call and the result is embedded into the
-// RPM URL from Go, not from a shell.
-func TestInstallWarpRPMArgv(t *testing.T) {
-	if runtime.GOARCH != "amd64" {
-		t.Skipf("Cloudflare 仅发布 x86_64 RPM；当前 GOARCH=%s 上 installWarpRPM 故意失败，跳过", runtime.GOARCH)
-	}
-	t.Parallel()
-
+// TestInstallWarpRHELArgv exercises the shared RHEL installer with a fake
+// runner, proving the RHEL version is resolved via a separate rpm -E call and
+// the result is embedded into the RPM URL from Go, not from a shell.
+func TestInstallWarpRHELArgv(t *testing.T) {
+	stubWarpGOARCH(t, "amd64")
 	rec := &recorder{reply: map[string]string{"rpm": "9\n"}}
 
 	// First rpm call (probe) returns "9\n"; subsequent rpm call installs.
 	// The explicit runner parameter keeps the shell-out fake local to this test.
 	// The recorder returns "9\n" for every rpm invocation, which is fine —
 	// only the first rpm call's output is consulted.
-	if err := installWarpRPM(context.Background(), rec); err != nil {
-		t.Fatalf("installWarpRPM: %v", err)
+	if err := installWarpRHEL(context.Background(), rec, pkgManagerDNF); err != nil {
+		t.Fatalf("installWarpRHEL: %v", err)
 	}
 
 	if len(rec.calls) != 2 {
-		t.Fatalf("calls = %d, want 2 (rpm -E, then rpm -ivh); got %v", len(rec.calls), rec.calls)
+		t.Fatalf("calls = %d, want 2 (rpm -E, then dnf install); got %v", len(rec.calls), rec.calls)
 	}
 
 	wantProbe := []string{"rpm", "-E", "%rhel"}
@@ -100,15 +94,48 @@ func TestInstallWarpRPMArgv(t *testing.T) {
 	}
 
 	install := rec.calls[1]
-	wantInstallPrefix := []string{"rpm", "-ivh"}
-	if len(install) != 3 || !argvEqual(install[:2], wantInstallPrefix) {
+	wantInstallPrefix := []string{"dnf", "install", "-y"}
+	if len(install) != 4 || !argvEqual(install[:3], wantInstallPrefix) {
 		t.Fatalf("install argv = %v, want prefix %v", install, wantInstallPrefix)
 	}
-	if !strings.Contains(install[2], "el9") {
-		t.Errorf("install URL %q should contain %q (resolved from rpm -E output)", install[2], "el9")
+	if !strings.Contains(install[3], "el9") {
+		t.Errorf("install URL %q should contain %q (resolved from rpm -E output)", install[3], "el9")
 	}
-	if strings.Contains(install[2], "$(") {
-		t.Errorf("install URL %q still contains shell substitution", install[2])
+	if strings.Contains(install[3], "$(") {
+		t.Errorf("install URL %q still contains shell substitution", install[3])
+	}
+}
+
+func TestInstallWarpDispatchesRHELPackageManagers(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		pkgManager string
+	}{
+		{name: "yum", pkgManager: pkgManagerYUM},
+		{name: "dnf", pkgManager: pkgManagerDNF},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stubWarpGOARCH(t, "amd64")
+			stubWarpCommandExists(t, func(name string) bool {
+				return name == tc.pkgManager
+			})
+
+			rec := &recorder{reply: map[string]string{"rpm": "8\n"}}
+			if err := installWarp(context.Background(), rec); err != nil {
+				t.Fatalf("installWarp: %v", err)
+			}
+
+			wantURL := "https://pkg.cloudflareclient.com/pool/cloudflare-warp-el8.x86_64.rpm"
+			if !hasCall(rec.calls, []string{"rpm", "-E", "%rhel"}) {
+				t.Fatalf("calls = %v, want RHEL version probe", rec.calls)
+			}
+			if !hasCall(rec.calls, []string{tc.pkgManager, "install", "-y", wantURL}) {
+				t.Fatalf("calls = %v, want %s install path", rec.calls, tc.pkgManager)
+			}
+			if hasCall(rec.calls, []string{pkgManagerAPT, "update"}) {
+				t.Fatalf("calls = %v, should not run apt path for %s", rec.calls, tc.pkgManager)
+			}
+		})
 	}
 }
 
@@ -179,6 +206,17 @@ func stubWarpCommandExists(t *testing.T, exists func(string) bool) {
 
 	t.Cleanup(func() {
 		warpCommandExists = orig
+	})
+}
+
+func stubWarpGOARCH(t *testing.T, goarch string) {
+	t.Helper()
+
+	orig := warpGOARCH
+	warpGOARCH = goarch
+
+	t.Cleanup(func() {
+		warpGOARCH = orig
 	})
 }
 

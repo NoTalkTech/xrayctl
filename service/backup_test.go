@@ -2,6 +2,7 @@ package service
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"errors"
@@ -18,7 +19,7 @@ func TestValidateTarForRootExtractionAcceptsNormalBackupPaths(t *testing.T) {
 		{name: "usr/local/etc/xray/cert/xray.crt", body: "cert"},
 	})
 
-	if err := validateTarForRootExtraction(archive, safeRestorePrefixes, nil); err != nil {
+	if err := validateTarForRootExtraction(readArchiveBytes(t, archive), safeRestorePrefixes, nil); err != nil {
 		t.Fatalf("validateTarForRootExtraction returned error: %v", err)
 	}
 }
@@ -32,7 +33,7 @@ func TestValidateTarForRootExtractionAcceptsDirectoryEntries(t *testing.T) {
 		{name: "etc/xrayctl/config.yaml", body: "uuid: abc\n"},
 	})
 
-	if err := validateTarForRootExtraction(archive, safeRestorePrefixes, nil); err != nil {
+	if err := validateTarForRootExtraction(readArchiveBytes(t, archive), safeRestorePrefixes, nil); err != nil {
 		t.Fatalf("validateTarForRootExtraction returned error for tar with dir entries: %v", err)
 	}
 }
@@ -74,7 +75,7 @@ func TestValidateTarForRootExtractionRejectsUnsafePaths(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			archive := writeTarGz(t, []testTarEntry{tc.entry})
 
-			err := validateTarForRootExtraction(archive, safeRestorePrefixes, nil)
+			err := validateTarForRootExtraction(readArchiveBytes(t, archive), safeRestorePrefixes, nil)
 			if err == nil {
 				t.Fatal("validateTarForRootExtraction returned nil, want error")
 			}
@@ -91,7 +92,7 @@ func TestValidateTarForRootExtractionRejectsPathsThroughArchiveSymlink(t *testin
 		{name: "etc/xrayctl/link/config.yaml", body: "uuid: abc\n"},
 	})
 
-	err := validateTarForRootExtraction(archive, safeRestorePrefixes, nil)
+	err := validateTarForRootExtraction(readArchiveBytes(t, archive), safeRestorePrefixes, nil)
 	if err == nil {
 		t.Fatal("validateTarForRootExtraction returned nil, want archive symlink traversal error")
 	}
@@ -100,10 +101,9 @@ func TestValidateTarForRootExtractionRejectsPathsThroughArchiveSymlink(t *testin
 	}
 }
 
-
 func TestValidateTarRejectsHardlinkToUnpermittedTarget(t *testing.T) {
 	archive := writeHardlinkTarGz(t, "etc/xrayctl/link", "etc/passwd")
-	err := validateTarForRootExtraction(archive, safeRestorePrefixes, nil)
+	err := validateTarForRootExtraction(readArchiveBytes(t, archive), safeRestorePrefixes, nil)
 	if err == nil {
 		t.Fatal("validateTarForRootExtraction returned nil, want hardlink target prefix error")
 	}
@@ -163,7 +163,7 @@ func TestValidateTarForRootExtractionAcceptsExactFilePaths(t *testing.T) {
 		{name: "etc/xray.json", body: `{"log": {}}`},
 	})
 
-	err := validateTarForRootExtraction(archive, nil, []string{"etc/xray.json"})
+	err := validateTarForRootExtraction(readArchiveBytes(t, archive), nil, []string{"etc/xray.json"})
 	if err != nil {
 		t.Fatalf("expected no error for exact allowed path, got: %v", err)
 	}
@@ -175,7 +175,7 @@ func TestValidateTarForRootExtractionRejectsParentDirWhenOnlyExactFileAllowed(t 
 		{name: "etc/passwd", body: "root:x:0:0:"},
 	})
 
-	err := validateTarForRootExtraction(archive, nil, []string{"etc/xray.json"})
+	err := validateTarForRootExtraction(readArchiveBytes(t, archive), nil, []string{"etc/xray.json"})
 	if err == nil {
 		t.Fatal("expected error for etc/passwd outside exact paths")
 	}
@@ -188,6 +188,10 @@ func TestRestoreRejectsUnsafeArchiveBeforeCommands(t *testing.T) {
 	archive := writeTarGz(t, []testTarEntry{{name: "../etc/passwd", body: "x"}})
 	recorder := &restoreCommandRecorder{}
 	stubDefaultRunner(t, recorder)
+	stubRestoreExtractor(t, func([]byte) error {
+		t.Fatal("Restore extracted archive after validation failed")
+		return nil
+	})
 
 	err := Restore(archive)
 	if err == nil {
@@ -201,12 +205,22 @@ func TestRestoreRejectsUnsafeArchiveBeforeCommands(t *testing.T) {
 func TestRestoreReturnsRestartErrorAfterSuccessfulExtract(t *testing.T) {
 	restartErr := errors.New("systemctl start failed")
 	archive := writeTarGz(t, []testTarEntry{{name: "etc/xrayctl/config.yaml", body: "uuid: abc\n"}})
+	wantArchive := readArchiveBytes(t, archive)
+	extracted := false
 	recorder := &restoreCommandRecorder{
 		errByCall: map[string]error{
 			"systemctl start xray nginx warp-svc": restartErr,
 		},
 	}
 	stubDefaultRunner(t, recorder)
+	stubRestoreExtractor(t, func(got []byte) error {
+		extracted = true
+		if !bytes.Equal(got, wantArchive) {
+			t.Fatal("Restore extracted bytes different from the archive bytes read before validation")
+		}
+
+		return nil
+	})
 
 	err := Restore(archive)
 	if err == nil {
@@ -215,8 +229,8 @@ func TestRestoreReturnsRestartErrorAfterSuccessfulExtract(t *testing.T) {
 	if !strings.Contains(err.Error(), "restart services after restore") {
 		t.Fatalf("Restore error = %q, want restart context", err)
 	}
-	if !containsCall(recorder.calls, "tar -zxf "+archive+" -C /") {
-		t.Fatalf("Restore did not extract archive before restart failure: %v", recorder.calls)
+	if !extracted {
+		t.Fatal("Restore did not extract archive before restart failure")
 	}
 }
 
@@ -227,7 +241,6 @@ type testTarEntry struct {
 	dir      bool
 	hardlink bool
 }
-
 
 func writeHardlinkTarGz(t *testing.T, name, linkname string) string {
 	t.Helper()
@@ -251,6 +264,17 @@ func writeHardlinkTarGz(t *testing.T, name, linkname string) string {
 	gz.Close()
 	file.Close()
 	return path
+}
+
+func readArchiveBytes(t *testing.T, path string) []byte {
+	t.Helper()
+
+	archiveBytes, err := os.ReadFile(path) //nolint:gosec // test archive path is in t.TempDir
+	if err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+
+	return archiveBytes
 }
 
 func writeTarGz(t *testing.T, entries []testTarEntry) string {
@@ -336,5 +360,16 @@ func stubDefaultRunner(t *testing.T, runner internal.CommandRunner) {
 
 	t.Cleanup(func() {
 		internal.DefaultRunner = origRunner
+	})
+}
+
+func stubRestoreExtractor(t *testing.T, extractor func([]byte) error) {
+	t.Helper()
+
+	origExtractor := restoreArchiveExtractor
+	restoreArchiveExtractor = extractor
+
+	t.Cleanup(func() {
+		restoreArchiveExtractor = origExtractor
 	})
 }

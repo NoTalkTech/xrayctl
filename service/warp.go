@@ -17,7 +17,10 @@ const (
 	warpGPGKeyring     = "/usr/share/keyrings/cloudflare-warp.gpg"
 )
 
-var warpCommandExists = internal.CommandExists
+var (
+	warpCommandExists = internal.CommandExists
+	warpGOARCH        = runtime.GOARCH
+)
 
 // warpAptRepoLine builds the single-line apt source entry for the Cloudflare
 // WARP repo, pinned to the given distro codename.
@@ -147,10 +150,24 @@ func setupWarp(ctx context.Context, cfg *config.Config, runner internal.CommandR
 	return nil
 }
 
-// installWarp adds the Cloudflare apt/rpm repo and installs the cloudflare-warp
-// package. It dispatches by package manager: apt on Debian/Ubuntu, rpm on
-// RHEL-family hosts.
+// installWarp dispatches WARP installation to the detected package manager.
 func installWarp(ctx context.Context, runner internal.CommandRunner) error {
+	ctx = backgroundIfNil(ctx)
+
+	switch {
+	case warpCommandExists(pkgManagerAPT):
+		return installWarpApt(ctx, runner)
+	case warpCommandExists(pkgManagerYUM):
+		return installWarpYum(ctx, runner)
+	case warpCommandExists(pkgManagerDNF):
+		return installWarpDnf(ctx, runner)
+	default:
+		internal.PrintRed("未找到支持的包管理器（apt/yum/dnf）")
+		return fmt.Errorf("no supported package manager found")
+	}
+}
+
+func installWarpApt(ctx context.Context, runner internal.CommandRunner) error {
 	ctx = backgroundIfNil(ctx)
 
 	// The GPG fetch genuinely needs a pipe between two processes; the URL is
@@ -166,20 +183,6 @@ func installWarp(ctx context.Context, runner internal.CommandRunner) error {
 
 		return err
 	}
-
-	switch {
-	case warpCommandExists("apt"):
-		return installWarpApt(ctx, runner)
-	case warpCommandExists("yum") || warpCommandExists("dnf"):
-		return installWarpRPM(ctx, runner)
-	default:
-		internal.PrintRed("未找到支持的包管理器（apt/yum/dnf）")
-		return fmt.Errorf("no supported package manager found")
-	}
-}
-
-func installWarpApt(ctx context.Context, runner internal.CommandRunner) error {
-	ctx = backgroundIfNil(ctx)
 
 	codenameOut, err := runner.Run(ctx, "lsb_release", "-cs")
 	if err != nil {
@@ -203,7 +206,7 @@ func installWarpApt(ctx context.Context, runner internal.CommandRunner) error {
 		return err
 	}
 
-	if _, err := runner.RunWithSudo(ctx, "apt", "update"); err != nil {
+	if _, err := runner.RunWithSudo(ctx, pkgManagerAPT, "update"); err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
@@ -213,7 +216,7 @@ func installWarpApt(ctx context.Context, runner internal.CommandRunner) error {
 		return err
 	}
 
-	if _, err := runner.RunWithSudo(ctx, "apt", "install", "-y", "cloudflare-warp"); err != nil {
+	if _, err := runner.RunWithSudo(ctx, pkgManagerAPT, "install", "-y", "cloudflare-warp"); err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
@@ -226,7 +229,15 @@ func installWarpApt(ctx context.Context, runner internal.CommandRunner) error {
 	return nil
 }
 
-func installWarpRPM(ctx context.Context, runner internal.CommandRunner) error {
+func installWarpYum(ctx context.Context, runner internal.CommandRunner) error {
+	return installWarpRHEL(ctx, runner, pkgManagerYUM)
+}
+
+func installWarpDnf(ctx context.Context, runner internal.CommandRunner) error {
+	return installWarpRHEL(ctx, runner, pkgManagerDNF)
+}
+
+func installWarpRHEL(ctx context.Context, runner internal.CommandRunner, pkgManager string) error {
 	ctx = backgroundIfNil(ctx)
 
 	// `rpm -E %rhel` prints the major RHEL version (e.g. "9"). We resolve it
@@ -247,13 +258,13 @@ func installWarpRPM(ctx context.Context, runner internal.CommandRunner) error {
 		return fmt.Errorf("empty RHEL version from rpm -E %%rhel")
 	}
 
-	url, err := warpRPMURL(rhel, runtime.GOARCH)
+	url, err := warpRPMURL(rhel, warpGOARCH)
 	if err != nil {
 		internal.PrintRed("%v", err)
 		return err
 	}
 
-	if _, err := runner.Run(ctx, "rpm", "-ivh", url); err != nil {
+	if _, err := runner.RunWithSudo(ctx, pkgManager, "install", "-y", url); err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
