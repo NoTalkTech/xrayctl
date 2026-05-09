@@ -1,6 +1,6 @@
 # xrayctl — Task Breakdown
 
-Generated from the first-principles revisit of `OPTIMIZATION_PLAN.md`.
+Generated from the first-principles revisit of `docs/OPTIMIZATION_PLAN.md`.
 Phase 1 is framed as **fail-safe root installer cleanup**, not generic DX cleanup.
 
 ---
