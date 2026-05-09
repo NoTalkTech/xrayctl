@@ -22,5 +22,7 @@ func TestRestartService(t *testing.T) {
 func TestUninstall(t *testing.T) {
 	// 跳过卸载测试，避免删除系统组件
 	t.Skip("Skip uninstall test")
-	Uninstall()
+	if err := Uninstall(); err != nil {
+		t.Logf("Uninstall result: %v", err)
+	}
 }

@@ -2,16 +2,21 @@ package service
 
 import (
 	"encoding/json"
-	"strings"
+	"os"
+	"path/filepath"
+	"regexp"
 	"testing"
 
 	"xrayctl/config"
+	"xrayctl/internal"
 )
+
+var uuidV4ShapeRE = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 
 func TestBuildXrayConfigJSON(t *testing.T) {
 	cfg := &config.Config{
 		Domain:    "test.example.com",
-		UUID:      "test-uuid-1234-5678",
+		UUID:      "11111111-1111-4111-8111-111111111111",
 		CertDir:   "/tmp/cert",
 		WARPPort:  40000,
 		XrayPort:  443,
@@ -73,28 +78,98 @@ func TestBuildXrayConfigJSON(t *testing.T) {
 	}
 }
 
-func TestGenerateUUIDFromEmailIsValid(t *testing.T) {
-	u := generateUUIDFromEmail("user@example.com")
-	if len(u) != 36 {
-		t.Errorf("UUID length = %d, want 36 (%q)", len(u), u)
+func TestResolveXrayUUIDPriority(t *testing.T) {
+	const (
+		explicitUUID  = "11111111-1111-4111-8111-111111111111"
+		existingUUID  = "22222222-2222-4222-8222-222222222222"
+		generatedUUID = "33333333-3333-4333-8333-333333333333"
+	)
+
+	existingConfigPath := writeXrayConfigWithUUID(t, existingUUID)
+	missingConfigPath := filepath.Join(t.TempDir(), "missing.json")
+
+	tests := []struct {
+		name          string
+		cfg           config.Config
+		wantUUID      string
+		wantGenerated bool
+	}{
+		{
+			name: "explicit config UUID wins over existing Xray config",
+			cfg: config.Config{
+				UUID:       explicitUUID,
+				Email:      "user@example.com",
+				XrayConfig: existingConfigPath,
+			},
+			wantUUID: explicitUUID,
+		},
+		{
+			name: "existing Xray config UUID is preserved",
+			cfg: config.Config{
+				Email:      "user@example.com",
+				XrayConfig: existingConfigPath,
+			},
+			wantUUID: existingUUID,
+		},
+		{
+			name: "random UUID is generated only without explicit or existing UUID",
+			cfg: config.Config{
+				Email:      "user@example.com",
+				XrayConfig: missingConfigPath,
+			},
+			wantUUID:      generatedUUID,
+			wantGenerated: true,
+		},
 	}
-	// Deterministic: same email → same UUID.
-	if u2 := generateUUIDFromEmail("user@example.com"); u != u2 {
-		t.Errorf("UUID not deterministic: %q vs %q", u, u2)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			generated := false
+			got := resolveXrayUUID(&tt.cfg, func() string {
+				generated = true
+				return generatedUUID
+			})
+
+			if got != tt.wantUUID {
+				t.Errorf("resolveXrayUUID() = %q, want %q", got, tt.wantUUID)
+			}
+			if generated != tt.wantGenerated {
+				t.Errorf("generator called = %t, want %t", generated, tt.wantGenerated)
+			}
+		})
 	}
-	// Different email → different UUID (collisions are astronomically unlikely).
-	if u3 := generateUUIDFromEmail("other@example.com"); u == u3 {
-		t.Errorf("UUID collision across distinct emails: %q", u)
+}
+
+func TestResolveXrayUUIDGeneratesValidRandomUUID(t *testing.T) {
+	cfg := &config.Config{
+		Email:      "user@example.com",
+		XrayConfig: filepath.Join(t.TempDir(), "missing.json"),
 	}
-	// Shape check: 8-4-4-4-12.
-	parts := strings.Split(u, "-")
-	wantLens := []int{8, 4, 4, 4, 12}
-	if len(parts) != 5 {
-		t.Fatalf("UUID parts = %d, want 5 (%q)", len(parts), u)
+
+	got := resolveXrayUUID(cfg, internal.GenerateUUID)
+	if !uuidV4ShapeRE.MatchString(got) {
+		t.Errorf("generated UUID = %q, want canonical UUID v4", got)
 	}
-	for i, p := range parts {
-		if len(p) != wantLens[i] {
-			t.Errorf("UUID part %d len = %d, want %d (%q)", i, len(p), wantLens[i], u)
-		}
+}
+
+func writeXrayConfigWithUUID(t *testing.T, uuid string) string {
+	t.Helper()
+
+	data, err := json.Marshal(XrayConfig{
+		Inbounds: []XrayInbound{{
+			Settings: XrayInboundSettings{
+				Clients: []XrayClient{{ID: uuid}},
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal Xray config fixture: %v", err)
 	}
+
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write Xray config fixture: %v", err)
+	}
+
+	return path
 }

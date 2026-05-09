@@ -83,7 +83,13 @@ func SetupNginxVlessConf(cfg *config.Config) error {
 	if cfg.Domain == "" {
 		// Reuse the shared prompt helper so we get EOF-safe behavior and
 		// domain validation instead of fmt.Scanln spinning on closed stdin.
-		cfg.Domain = promptValue("域名", "", validateDomain)
+		domain, err := promptValue("域名", "", validateDomain)
+		if err != nil {
+			return fmt.Errorf("读取 Nginx Vless 域名: %w", err)
+		}
+
+		cfg.Domain = domain
+
 		if err := config.SaveConfig(cfg); err != nil {
 			internal.PrintYellow("保存配置失败: %v", err)
 		}

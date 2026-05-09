@@ -2,33 +2,112 @@ package service
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"xrayctl/config"
 	"xrayctl/internal"
 )
 
-// CheckSystemEnvironment 检查系统环境并自动安装缺失依赖.
-func CheckSystemEnvironment(cfg *config.Config) {
-	internal.PrintYellow(">>> 系统环境检查 <<<")
+const nginxMainConfigPath = "/etc/nginx/nginx.conf"
 
-	// 检查必需命令
-	requiredCmds := []string{"curl", "jq", "nginx", "systemctl"}
+const sysctlConfigPath = "/etc/sysctl.conf"
+
+const (
+	pkgManagerAPT = "apt"
+	pkgManagerDNF = "dnf"
+	pkgManagerYUM = "yum"
+)
+
+type sysctlSetting struct {
+	Key   string
+	Value string
+}
+
+var bbrSysctlSettings = []sysctlSetting{
+	{Key: "net.core.default_qdisc", Value: "fq"},
+	{Key: "net.ipv4.tcp_congestion_control", Value: "bbr"},
+}
+
+var (
+	environmentCommandExists = internal.CommandExists
+	environmentFileExists    = internal.FileExists
+	environmentBaseInstaller = InstallBase
+)
+
+// EnvironmentReport contains collected environment state without terminal rendering.
+type EnvironmentReport struct {
+	MissingCommands        []string
+	ConfigPath             string
+	ConfigExists           bool
+	CertPath               string
+	CertExists             bool
+	XrayConfigPath         string
+	XrayConfigExists       bool
+	NginxMainConfigPath    string
+	NginxMainConfigExists  bool
+	NginxVlessConfigPath   string
+	NginxVlessConfigExists bool
+}
+
+// HasMissingCommands reports whether required commands are unavailable.
+func (r EnvironmentReport) HasMissingCommands() bool {
+	return len(r.MissingCommands) > 0
+}
+
+// ValidationError returns an error for read-only validation contexts such as --check.
+func (r EnvironmentReport) ValidationError() error {
+	if !r.HasMissingCommands() {
+		return nil
+	}
+
+	return fmt.Errorf("missing required commands: %s", strings.Join(r.MissingCommands, ", "))
+}
+
+// CollectEnvironmentReport inspects commands and key files without printing.
+func CollectEnvironmentReport(cfg *config.Config) EnvironmentReport {
 	missingCmds := []string{}
 
-	for _, cmd := range requiredCmds {
-		if !internal.CommandExists(cmd) {
+	for _, cmd := range requiredEnvironmentCommands() {
+		if !environmentCommandExists(cmd) {
 			missingCmds = append(missingCmds, cmd)
 		}
 	}
 
-	// 如果有缺失依赖，自动安装
-	if len(missingCmds) > 0 { //nolint:nestif // sequential checks with user interaction
-		internal.PrintRed("检测到缺失依赖:")
+	certPath := filepath.Join(cfg.CertDir, "xray.crt")
 
-		for _, cmd := range missingCmds {
-			fmt.Printf("  - %s\n", cmd)
-		}
+	return EnvironmentReport{
+		MissingCommands:        missingCmds,
+		ConfigPath:             config.ConfigPath,
+		ConfigExists:           environmentFileExists(config.ConfigPath),
+		CertPath:               certPath,
+		CertExists:             environmentFileExists(certPath),
+		XrayConfigPath:         cfg.XrayConfig,
+		XrayConfigExists:       environmentFileExists(cfg.XrayConfig),
+		NginxMainConfigPath:    nginxMainConfigPath,
+		NginxMainConfigExists:  environmentFileExists(nginxMainConfigPath),
+		NginxVlessConfigPath:   cfg.NginxConfig,
+		NginxVlessConfigExists: environmentFileExists(cfg.NginxConfig),
+	}
+}
+
+// PrintEnvironmentReport renders a collected environment report without taking action.
+func PrintEnvironmentReport(report EnvironmentReport) {
+	internal.PrintYellow(">>> 系统环境检查 <<<")
+	printDependencyReport(report)
+	printEnvironmentFileReport(report)
+}
+
+// CheckSystemEnvironment 检查系统环境并自动安装缺失依赖.
+func CheckSystemEnvironment(cfg *config.Config) (EnvironmentReport, error) {
+	internal.PrintYellow(">>> 系统环境检查 <<<")
+
+	report := CollectEnvironmentReport(cfg)
+
+	// 如果有缺失依赖，自动安装
+	if report.HasMissingCommands() { //nolint:nestif // sequential checks with user interaction
+		printDependencyReport(report)
 
 		fmt.Println()
 		fmt.Print("是否需要自动安装这些依赖？(Y/n): ")
@@ -38,24 +117,17 @@ func CheckSystemEnvironment(cfg *config.Config) {
 		_, _ = fmt.Scanln(&confirm) //nolint:errcheck // user input prompt, best-effort
 
 		if strings.EqualFold(confirm, "y") || strings.EqualFold(confirm, "yes") || confirm == "" {
-			err := InstallBase()
-			if err != nil {
-				internal.PrintYellow("依赖安装完成，请重试")
-				return
+			if err := environmentBaseInstaller(); err != nil {
+				return report, fmt.Errorf("install missing dependencies: %w", err)
 			}
 
 			// 安装完成后，重新检查
-			missingCmds = []string{}
+			report = CollectEnvironmentReport(cfg)
 
-			for _, cmd := range requiredCmds {
-				if !internal.CommandExists(cmd) {
-					missingCmds = append(missingCmds, cmd)
-				}
-			}
-
-			if len(missingCmds) > 0 {
+			if report.HasMissingCommands() {
 				internal.PrintRed("依赖安装失败，请手动安装")
-				return
+
+				return report, fmt.Errorf("missing dependencies after installation: %s", strings.Join(report.MissingCommands, ", "))
 			}
 
 			internal.PrintGreen("所有依赖安装完成")
@@ -63,44 +135,67 @@ func CheckSystemEnvironment(cfg *config.Config) {
 			internal.PrintGreen("跳过依赖安装")
 		}
 	} else {
-		internal.PrintGreen("所有依赖已安装")
+		printDependencyReport(report)
 	}
 
-	// 检查配置文件
+	printEnvironmentFileReport(report)
+
+	return report, nil
+}
+
+func printDependencyReport(report EnvironmentReport) {
+	if !report.HasMissingCommands() {
+		internal.PrintGreen("所有依赖已安装")
+
+		return
+	}
+
+	internal.PrintRed("检测到缺失依赖:")
+
+	for _, cmd := range report.MissingCommands {
+		fmt.Printf("  - %s\n", cmd)
+	}
+}
+
+func printEnvironmentFileReport(report EnvironmentReport) {
 	internal.PrintYellow("\n>>> 配置文件检查 <<<")
 
-	if internal.FileExists(config.ConfigPath) {
-		internal.PrintGreen("配置文件: %s", config.ConfigPath)
+	if report.ConfigExists {
+		internal.PrintGreen("配置文件: %s", report.ConfigPath)
 	} else {
 		internal.PrintYellow("配置文件: 不存在（首次运行或未配置）")
 	}
 
 	// 检查证书目录
-	if internal.FileExists(fmt.Sprintf("%s/xray.crt", cfg.CertDir)) {
-		internal.PrintGreen("证书文件: %s/xray.crt", cfg.CertDir)
+	if report.CertExists {
+		internal.PrintGreen("证书文件: %s", report.CertPath)
 	} else {
 		internal.PrintYellow("证书文件: 不存在")
 	}
 
 	// 检查Xray配置
-	if internal.FileExists(cfg.XrayConfig) {
-		internal.PrintGreen("Xray配置: %s", cfg.XrayConfig)
+	if report.XrayConfigExists {
+		internal.PrintGreen("Xray配置: %s", report.XrayConfigPath)
 	} else {
 		internal.PrintYellow("Xray配置: 不存在")
 	}
 
 	// 检查Nginx配置
-	if internal.FileExists("/etc/nginx/nginx.conf") {
-		internal.PrintGreen("Nginx主配置: /etc/nginx/nginx.conf")
+	if report.NginxMainConfigExists {
+		internal.PrintGreen("Nginx主配置: %s", report.NginxMainConfigPath)
 	} else {
 		internal.PrintYellow("Nginx主配置: 不存在")
 	}
 
-	if internal.FileExists(cfg.NginxConfig) {
-		internal.PrintGreen("Nginx Vless配置: %s", cfg.NginxConfig)
+	if report.NginxVlessConfigExists {
+		internal.PrintGreen("Nginx Vless配置: %s", report.NginxVlessConfigPath)
 	} else {
 		internal.PrintYellow("Nginx Vless配置: 不存在")
 	}
+}
+
+func requiredEnvironmentCommands() []string {
+	return []string{"curl", "jq", "nginx", "systemctl"}
 }
 
 // InstallBase 安装基础依赖和开启BBR.
@@ -121,38 +216,29 @@ func InstallBase() error {
 	if len(missingCmds) == 0 {
 		internal.PrintGreen("所有依赖已安装，跳过安装步骤")
 	} else {
-		missedCmdsStr := strings.Join(missingCmds, " ")
-
 		// 检测系统类型
-		var (
-			installCmd string
-			pkgManager string
-		)
+		var pkgManager string
 
 		switch {
-		case internal.CommandExists("apt"):
+		case internal.CommandExists(pkgManagerAPT):
 			// Debian/Ubuntu系
-			installCmd = "apt update && apt install -y " + missedCmdsStr
-			pkgManager = "apt"
-		case internal.CommandExists("yum"):
+			pkgManager = pkgManagerAPT
+		case internal.CommandExists(pkgManagerYUM):
 			// CentOS/RHEL系
-			installCmd = "yum install -y " + missedCmdsStr
-			pkgManager = "yum"
-		case internal.CommandExists("dnf"):
+			pkgManager = pkgManagerYUM
+		case internal.CommandExists(pkgManagerDNF):
 			// 新CentOS/Fedora
-			installCmd = "dnf install -y " + missedCmdsStr
-			pkgManager = "dnf"
+			pkgManager = pkgManagerDNF
 		default:
 			internal.PrintRed("不支持的系统类型，仅支持Debian/Ubuntu/CentOS")
 			return fmt.Errorf("unsupported system")
 		}
 
 		internal.PrintGreen("检测到包管理器: %s", pkgManager)
-		internal.PrintYellow("缺失依赖: %v", missedCmdsStr)
+		internal.PrintYellow("缺失依赖: %v", strings.Join(missingCmds, " "))
 
 		// 执行安装
-		_, err := internal.ExecCommandWithSudo("bash", "-c", installCmd)
-		if err != nil {
+		if err := installMissingPackages(pkgManager, missingCmds); err != nil {
 			internal.PrintRed("依赖安装失败: %v", err)
 			return err
 		}
@@ -167,18 +253,14 @@ func InstallBase() error {
 	}
 
 	if !strings.Contains(bbrOutput, "bbr") {
-		// 开启BBR
-		cmds := []string{
-			"echo 'net.core.default_qdisc=fq' >> /etc/sysctl.conf",
-			"echo 'net.ipv4.tcp_congestion_control=bbr' >> /etc/sysctl.conf",
-			"sysctl -p",
+		if err := applySysctlSettings(sysctlConfigPath, bbrSysctlSettings); err != nil {
+			internal.PrintRed("写入BBR sysctl配置失败: %v", err)
+			return err
 		}
-		for _, cmd := range cmds {
-			_, err := internal.ExecCommandWithSudo("bash", "-c", cmd)
-			if err != nil {
-				internal.PrintRed("开启BBR失败: %v", err)
-				return err
-			}
+
+		if _, err := internal.ExecCommandWithSudo("sysctl", "-p"); err != nil {
+			internal.PrintRed("开启BBR失败: %v", err)
+			return err
 		}
 
 		internal.PrintGreen("BBR加速开启成功")
@@ -189,4 +271,107 @@ func InstallBase() error {
 	internal.PrintGreen("基础环境配置完成")
 
 	return nil
+}
+
+func installMissingPackages(pkgManager string, missingCmds []string) error {
+	switch pkgManager {
+	case pkgManagerAPT:
+		if _, err := internal.ExecCommandWithSudo(pkgManagerAPT, "update"); err != nil {
+			return err
+		}
+
+		return installPackages(pkgManagerAPT, append([]string{"install", "-y"}, missingCmds...)...)
+
+	case pkgManagerYUM, pkgManagerDNF:
+		return installPackages(pkgManager, append([]string{"install", "-y"}, missingCmds...)...)
+
+	default:
+		return fmt.Errorf("unsupported package manager %q", pkgManager)
+	}
+}
+
+func installPackages(pkgManager string, args ...string) error {
+	_, err := internal.ExecCommandWithSudo(pkgManager, args...)
+
+	return err
+}
+
+func applySysctlSettings(path string, settings []sysctlSetting) error {
+	data, err := os.ReadFile(path) //nolint:gosec // sysctl path is fixed in production and temp-scoped in tests
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	lines := splitConfigLines(string(data))
+	seen := make(map[string]bool, len(settings))
+	output := make([]string, 0, len(lines)+len(settings))
+
+	for _, line := range lines {
+		key, ok := sysctlAssignmentKey(line)
+		setting, managed := lookupSysctlSetting(settings, key)
+
+		if !ok || !managed {
+			output = append(output, line)
+			continue
+		}
+
+		if seen[key] {
+			continue
+		}
+
+		output = append(output, formatSysctlSetting(setting))
+		seen[key] = true
+	}
+
+	for _, setting := range settings {
+		if !seen[setting.Key] {
+			output = append(output, formatSysctlSetting(setting))
+		}
+	}
+
+	result := []byte(strings.Join(output, "\n") + "\n")
+
+	return os.WriteFile(path, result, 0o644) //nolint:gosec // sysctl.conf is conventionally world-readable
+}
+
+func splitConfigLines(data string) []string {
+	data = strings.TrimSuffix(data, "\n")
+	if data == "" {
+		return nil
+	}
+
+	return strings.Split(data, "\n")
+}
+
+func sysctlAssignmentKey(line string) (string, bool) {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+		return "", false
+	}
+
+	key, _, ok := strings.Cut(trimmed, "=")
+	if !ok {
+		return "", false
+	}
+
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return "", false
+	}
+
+	return key, true
+}
+
+func lookupSysctlSetting(settings []sysctlSetting, key string) (sysctlSetting, bool) {
+	for _, setting := range settings {
+		if setting.Key == key {
+			return setting, true
+		}
+	}
+
+	return sysctlSetting{}, false
+}
+
+func formatSysctlSetting(setting sysctlSetting) string {
+	return setting.Key + " = " + setting.Value
 }

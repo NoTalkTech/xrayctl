@@ -2,11 +2,12 @@ package service
 
 import (
 	"context"
+	"errors"
 	"runtime"
 	"strings"
 	"testing"
 
-	"xrayctl/internal"
+	"xrayctl/config"
 )
 
 func TestWarpAptRepoLine(t *testing.T) {
@@ -46,8 +47,11 @@ type recorder struct {
 	reply map[string]string // keyed on argv[0] for canned stdout
 }
 
-func (r *recorder) run(name string, args ...string) (string, error) {
+func (r *recorder) run(ctx context.Context, name string, args ...string) (string, error) {
 	r.calls = append(r.calls, append([]string{name}, args...))
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	if r.reply != nil {
 		if out, ok := r.reply[name]; ok {
 			return out, nil
@@ -56,14 +60,14 @@ func (r *recorder) run(name string, args ...string) (string, error) {
 	return "", nil
 }
 
-func (r *recorder) Run(_ context.Context, name string, args ...string) (string, error) {
-	return r.run(name, args...)
+func (r *recorder) Run(ctx context.Context, name string, args ...string) (string, error) {
+	return r.run(ctx, name, args...)
 }
-func (r *recorder) RunSilent(_ context.Context, name string, args ...string) (string, error) {
-	return r.run(name, args...)
+func (r *recorder) RunSilent(ctx context.Context, name string, args ...string) (string, error) {
+	return r.run(ctx, name, args...)
 }
-func (r *recorder) RunWithSudo(_ context.Context, name string, args ...string) (string, error) {
-	return r.run(name, args...)
+func (r *recorder) RunWithSudo(ctx context.Context, name string, args ...string) (string, error) {
+	return r.run(ctx, name, args...)
 }
 
 // TestInstallWarpRPMArgv exercises installWarpRPM end-to-end with a fake
@@ -74,15 +78,15 @@ func TestInstallWarpRPMArgv(t *testing.T) {
 	if runtime.GOARCH != "amd64" {
 		t.Skipf("Cloudflare 仅发布 x86_64 RPM；当前 GOARCH=%s 上 installWarpRPM 故意失败，跳过", runtime.GOARCH)
 	}
+	t.Parallel()
+
 	rec := &recorder{reply: map[string]string{"rpm": "9\n"}}
-	orig := internal.DefaultRunner
-	internal.DefaultRunner = rec
-	t.Cleanup(func() { internal.DefaultRunner = orig })
 
 	// First rpm call (probe) returns "9\n"; subsequent rpm call installs.
+	// The explicit runner parameter keeps the shell-out fake local to this test.
 	// The recorder returns "9\n" for every rpm invocation, which is fine —
 	// only the first rpm call's output is consulted.
-	if err := installWarpRPM(); err != nil {
+	if err := installWarpRPM(context.Background(), rec); err != nil {
 		t.Fatalf("installWarpRPM: %v", err)
 	}
 
@@ -106,6 +110,86 @@ func TestInstallWarpRPMArgv(t *testing.T) {
 	if strings.Contains(install[2], "$(") {
 		t.Errorf("install URL %q still contains shell substitution", install[2])
 	}
+}
+
+func TestSetupWarpPropagatesContextCancellation(t *testing.T) {
+	stubWarpCommandExists(t, func(name string) bool {
+		return name == "warp-cli"
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	runner := &cancelingWarpRunner{cancel: cancel}
+
+	err := setupWarp(ctx, &config.Config{WARPPort: 40000}, runner)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("setupWarp error = %v, want context.Canceled", err)
+	}
+
+	if !hasCall(runner.calls, []string{"warp-cli", "mode", "proxy"}) {
+		t.Fatalf("calls = %v, want warp-cli mode proxy to receive cancellable context", runner.calls)
+	}
+
+	if hasCall(runner.calls, []string{"warp-cli", "connect"}) {
+		t.Fatalf("calls = %v, should stop before warp-cli connect after cancellation", runner.calls)
+	}
+}
+
+type cancelingWarpRunner struct {
+	calls  [][]string
+	cancel context.CancelFunc
+}
+
+func (r *cancelingWarpRunner) record(name string, args ...string) {
+	r.calls = append(r.calls, append([]string{name}, args...))
+}
+
+func (r *cancelingWarpRunner) Run(ctx context.Context, name string, args ...string) (string, error) {
+	r.record(name, args...)
+
+	if name == "warp-cli" && argvEqual(append([]string{name}, args...), []string{"warp-cli", "mode", "proxy"}) {
+		r.cancel()
+
+		return "", ctx.Err()
+	}
+
+	return "", ctx.Err()
+}
+
+func (r *cancelingWarpRunner) RunSilent(ctx context.Context, name string, args ...string) (string, error) {
+	r.record(name, args...)
+
+	if argvEqual(append([]string{name}, args...), []string{"systemctl", "is-active", "warp-svc"}) {
+		return "active\n", ctx.Err()
+	}
+
+	return "", ctx.Err()
+}
+
+func (r *cancelingWarpRunner) RunWithSudo(ctx context.Context, name string, args ...string) (string, error) {
+	r.record(name, args...)
+
+	return "", ctx.Err()
+}
+
+func stubWarpCommandExists(t *testing.T, exists func(string) bool) {
+	t.Helper()
+
+	orig := warpCommandExists
+	warpCommandExists = exists
+
+	t.Cleanup(func() {
+		warpCommandExists = orig
+	})
+}
+
+func hasCall(calls [][]string, want []string) bool {
+	for _, call := range calls {
+		if argvEqual(call, want) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func argvEqual(a, b []string) bool {

@@ -41,9 +41,10 @@ sudo ./xrayctl --install --domain your-domain.com --email you@example.com < /dev
 --install               完整安装所有组件
 --domain string         指定域名
 --email string          指定证书申请邮箱（acme.sh 注册用）
---uuid string           指定 UUID（可选，默认自动生成或从已有配置恢复）
+--uuid string           指定 UUID（可选；默认优先从已有配置恢复，否则随机生成）
 
 # 运维操作
+--check                 只读预检环境与服务状态，不安装、不写配置、不重启服务
 --status                查看运行状态与连接参数
 --restart-warp          重启 WARP 代理并验证连通性
 --update-xray           更新 Xray 核心（保留配置与 UUID）
@@ -57,6 +58,10 @@ sudo ./xrayctl --install --domain your-domain.com --email you@example.com < /dev
 --uninstall             彻底卸载所有组件
 ```
 
+### Dry-run 状态
+
+`--dry-run` 暂不开放。可信的 dry-run 需要先为三类副作用补齐可测试 seam：文件写入（例如 `/etc/xrayctl/`、Nginx/Xray 配置和证书目录）、包安装（apt/yum/dnf 与外部安装脚本）、service 操作（restart/enable/stop）。在这些 seam 存在之前，xrayctl 只提供 `--check` 作为只读预检，避免把仍可能改系统状态的路径包装成“安全演练”。
+
 ## 🔌 客户端连接
 
 安装完成后 `--status` 会打印 VLESS 分享链接和分项参数：
@@ -66,7 +71,7 @@ sudo ./xrayctl --install --domain your-domain.com --email you@example.com < /dev
 | 协议 | `VLESS` |
 | 地址 | `<你的域名>` |
 | 端口 | `443` |
-| UUID | 自动生成 / 你指定的值 |
+| UUID | 你指定的值 / 既有配置中的值 / 随机生成 |
 | 流控 | `xtls-rprx-vision` |
 | 传输层安全 | `TLS` |
 | 传输协议 | `TCP` |

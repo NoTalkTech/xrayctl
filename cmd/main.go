@@ -1,11 +1,17 @@
 // Package main is the entry point for xrayctl.
 package main
 
-import "xrayctl/cli"
+import (
+	"os"
+
+	"xrayctl/cli"
+)
 
 func main() {
-	// 先解析命令行参数，如果有参数则执行，否则显示菜单
-	if !cli.ParseFlags() {
+	switch cli.ParseFlags() {
+	case -1:
 		cli.ShowMenu()
+	case 1:
+		os.Exit(1)
 	}
 }
