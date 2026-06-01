@@ -162,6 +162,7 @@ func installWarp(ctx context.Context, runner internal.CommandRunner) error {
 		}
 
 		return installWarpApt(ctx, runner, aptCmd)
+
 	case warpCommandExists(pkgManagerYUM):
 		return installWarpYum(ctx, runner)
 	case warpCommandExists(pkgManagerDNF):
