@@ -155,8 +155,12 @@ func installWarp(ctx context.Context, runner internal.CommandRunner) error {
 	ctx = backgroundIfNil(ctx)
 
 	switch {
-	case detectAptCommand() != "":
-		return installWarpApt(ctx, runner)
+	case warpCommandExists(pkgManagerAPT), warpCommandExists(pkgManagerAPTGet):
+		aptCmd := pkgManagerAPT
+		if warpCommandExists(pkgManagerAPTGet) {
+			aptCmd = pkgManagerAPTGet
+		}
+		return installWarpApt(ctx, runner, aptCmd)
 	case warpCommandExists(pkgManagerYUM):
 		return installWarpYum(ctx, runner)
 	case warpCommandExists(pkgManagerDNF):
@@ -167,7 +171,7 @@ func installWarp(ctx context.Context, runner internal.CommandRunner) error {
 	}
 }
 
-func installWarpApt(ctx context.Context, runner internal.CommandRunner) error {
+func installWarpApt(ctx context.Context, runner internal.CommandRunner, aptCmd string) error {
 	ctx = backgroundIfNil(ctx)
 
 	// The GPG fetch genuinely needs a pipe between two processes; the URL is
@@ -196,7 +200,7 @@ func installWarpApt(ctx context.Context, runner internal.CommandRunner) error {
 		return err
 	}
 
-	if _, err := runner.RunWithSudo(ctx, detectAptCommand(), "update"); err != nil {
+	if _, err := runner.RunWithSudo(ctx, aptCmd, "update"); err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
@@ -206,7 +210,7 @@ func installWarpApt(ctx context.Context, runner internal.CommandRunner) error {
 		return err
 	}
 
-	if _, err := runner.RunWithSudo(ctx, detectAptCommand(), "install", "-y", "cloudflare-warp"); err != nil {
+	if _, err := runner.RunWithSudo(ctx, aptCmd, "install", "-y", "cloudflare-warp"); err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
