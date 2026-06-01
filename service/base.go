@@ -27,9 +27,11 @@ func detectAptCommand() string {
 	if internal.CommandExists(pkgManagerAPT) {
 		return pkgManagerAPT
 	}
+
 	if internal.CommandExists(pkgManagerAPTGet) {
 		return pkgManagerAPTGet
 	}
+
 	return ""
 }
 

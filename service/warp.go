@@ -321,16 +321,20 @@ func readOSReleaseCodename() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("读取 /etc/os-release 失败: %w", err)
 	}
+
 	for _, line := range strings.Split(string(data), "\n") {
 		if !strings.HasPrefix(line, "VERSION_CODENAME=") {
 			continue
 		}
+
 		val := strings.TrimPrefix(line, "VERSION_CODENAME=")
 		val = strings.Trim(val, `"`)
 		val = strings.TrimSpace(val)
+
 		if val != "" {
 			return val, nil
 		}
 	}
+
 	return "", fmt.Errorf("/etc/os-release 未找到 VERSION_CODENAME")
 }
