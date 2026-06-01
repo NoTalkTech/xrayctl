@@ -155,7 +155,7 @@ func installWarp(ctx context.Context, runner internal.CommandRunner) error {
 	ctx = backgroundIfNil(ctx)
 
 	switch {
-	case warpCommandExists(pkgManagerAPT):
+	case detectAptCommand() != "":
 		return installWarpApt(ctx, runner)
 	case warpCommandExists(pkgManagerYUM):
 		return installWarpYum(ctx, runner)
@@ -184,20 +184,10 @@ func installWarpApt(ctx context.Context, runner internal.CommandRunner) error {
 		return err
 	}
 
-	codenameOut, err := runner.Run(ctx, "lsb_release", "-cs")
+	codename, err := readOSReleaseCodename()
 	if err != nil {
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return ctxErr
-		}
-
 		internal.PrintRed("读取发行版代号失败: %v", err)
-
 		return err
-	}
-
-	codename := strings.TrimSpace(codenameOut)
-	if codename == "" {
-		return fmt.Errorf("empty distro codename from lsb_release")
 	}
 
 	// os.WriteFile avoids piping user-controlled codename through a shell.
@@ -206,7 +196,7 @@ func installWarpApt(ctx context.Context, runner internal.CommandRunner) error {
 		return err
 	}
 
-	if _, err := runner.RunWithSudo(ctx, pkgManagerAPT, "update"); err != nil {
+	if _, err := runner.RunWithSudo(ctx, detectAptCommand(), "update"); err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
@@ -216,7 +206,7 @@ func installWarpApt(ctx context.Context, runner internal.CommandRunner) error {
 		return err
 	}
 
-	if _, err := runner.RunWithSudo(ctx, pkgManagerAPT, "install", "-y", "cloudflare-warp"); err != nil {
+	if _, err := runner.RunWithSudo(ctx, detectAptCommand(), "install", "-y", "cloudflare-warp"); err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
@@ -322,4 +312,25 @@ func RestartWarp(cfg *config.Config) error {
 // 调用方应与 internal.StatusActive 比较。
 func WarpStatus() string {
 	return internal.ServiceStatus(internal.ServiceWarp)
+}
+
+// readOSReleaseCodename 读取 /etc/os-release 中的 VERSION_CODENAME。
+// 所有现代 Linux 发行版（Debian 8+/Ubuntu 16.04+）都自带此文件。
+func readOSReleaseCodename() (string, error) {
+	data, err := os.ReadFile("/etc/os-release")
+	if err != nil {
+		return "", fmt.Errorf("读取 /etc/os-release 失败: %w", err)
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if !strings.HasPrefix(line, "VERSION_CODENAME=") {
+			continue
+		}
+		val := strings.TrimPrefix(line, "VERSION_CODENAME=")
+		val = strings.Trim(val, `"`)
+		val = strings.TrimSpace(val)
+		if val != "" {
+			return val, nil
+		}
+	}
+	return "", fmt.Errorf("/etc/os-release 未找到 VERSION_CODENAME")
 }

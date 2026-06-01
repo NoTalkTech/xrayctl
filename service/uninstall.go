@@ -68,6 +68,8 @@ func removePackagesForUninstall(pkgs []string) error {
 	switch {
 	case uninstallCommandExists(pkgManagerAPT):
 		return runPackageUninstall(pkgManagerAPT, append([]string{"purge", "-y"}, pkgs...)...)
+	case uninstallCommandExists(pkgManagerAPTGet):
+		return runPackageUninstall(pkgManagerAPTGet, append([]string{"purge", "-y"}, pkgs...)...)
 	case uninstallCommandExists(pkgManagerDNF):
 		return runPackageUninstall(pkgManagerDNF, append([]string{"remove", "-y"}, pkgs...)...)
 	case uninstallCommandExists(pkgManagerYUM):
