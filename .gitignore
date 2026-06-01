@@ -2,6 +2,7 @@
 /xrayctl
 /xrayctl-*
 *.exe
+.token-savior-cache.json
 
 # Backups / editor debris
 *.bak

@@ -15,10 +15,25 @@ const nginxMainConfigPath = "/etc/nginx/nginx.conf"
 const sysctlConfigPath = "/etc/sysctl.conf"
 
 const (
-	pkgManagerAPT = "apt"
-	pkgManagerDNF = "dnf"
-	pkgManagerYUM = "yum"
+	pkgManagerAPT    = "apt"
+	pkgManagerAPTGet = "apt-get"
+	pkgManagerDNF    = "dnf"
+	pkgManagerYUM    = "yum"
 )
+
+// detectAptCommand 检测系统可用的 apt 命令，优先 apt 后退回到 apt-get。
+// 最小 Docker 镜像（如 debian:stable-slim）可能仅提供 apt-get。
+func detectAptCommand() string {
+	if internal.CommandExists(pkgManagerAPT) {
+		return pkgManagerAPT
+	}
+
+	if internal.CommandExists(pkgManagerAPTGet) {
+		return pkgManagerAPTGet
+	}
+
+	return ""
+}
 
 type sysctlSetting struct {
 	Key   string
@@ -203,7 +218,7 @@ func InstallBase() error {
 	internal.PrintYellow("正在安装系统依赖与开启 BBR 加速...")
 
 	// 检查所有必需命令是否已存在
-	requiredCmds := []string{"curl", "jq", "nginx", "uuidgen", "socat", "lsb_release", "gpg", "systemctl", "wget", "git"}
+	requiredCmds := []string{"curl", "jq", "nginx", "socat", "gpg", "systemctl", "wget", "git"}
 	missingCmds := []string{}
 
 	for _, cmd := range requiredCmds {
@@ -220,9 +235,9 @@ func InstallBase() error {
 		var pkgManager string
 
 		switch {
-		case internal.CommandExists(pkgManagerAPT):
+		case detectAptCommand() != "":
 			// Debian/Ubuntu系
-			pkgManager = pkgManagerAPT
+			pkgManager = detectAptCommand()
 		case internal.CommandExists(pkgManagerYUM):
 			// CentOS/RHEL系
 			pkgManager = pkgManagerYUM
@@ -259,8 +274,10 @@ func InstallBase() error {
 		}
 
 		if _, err := internal.ExecCommandWithSudo("sysctl", "-p"); err != nil {
-			internal.PrintRed("开启BBR失败: %v", err)
-			return err
+			// 容器中 /proc/sys 默认只读，sysctl -p 必然失败。
+			// sysctl.conf 已写入，宿主机重启或特权模式运行后会生效。
+			internal.PrintYellow("BBR运行时参数设置失败（容器中需 --privileged 模式），"+
+				"已写入sysctl.conf待下次重启生效: %v", err)
 		}
 
 		internal.PrintGreen("BBR加速开启成功")
@@ -275,12 +292,12 @@ func InstallBase() error {
 
 func installMissingPackages(pkgManager string, missingCmds []string) error {
 	switch pkgManager {
-	case pkgManagerAPT:
-		if _, err := internal.ExecCommandWithSudo(pkgManagerAPT, "update"); err != nil {
+	case pkgManagerAPT, pkgManagerAPTGet:
+		if _, err := internal.ExecCommandWithSudo(pkgManager, "update"); err != nil {
 			return err
 		}
 
-		return installPackages(pkgManagerAPT, append([]string{"install", "-y"}, missingCmds...)...)
+		return installPackages(pkgManager, append([]string{"install", "-y"}, missingCmds...)...)
 
 	case pkgManagerYUM, pkgManagerDNF:
 		return installPackages(pkgManager, append([]string{"install", "-y"}, missingCmds...)...)
