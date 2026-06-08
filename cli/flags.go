@@ -30,6 +30,7 @@ func ParseFlags() int {
 		backup      = flag.Bool("backup", false, "备份配置与证书")
 		restore     = flag.String("restore", "", "从指定备份文件恢复")
 		uninstall   = flag.Bool("uninstall", false, "卸载所有组件")
+		version     = flag.Bool("version", false, "显示版本信息")
 	)
 
 	flag.Parse()
@@ -58,6 +59,7 @@ func ParseFlags() int {
 		{*backup, "--backup"},
 		{*restore != "", "--restore"},
 		{*uninstall, "--uninstall"},
+		{*version, "--version"},
 	}
 	var chosen []string
 
@@ -121,7 +123,7 @@ func ParseFlags() int {
 
 	if err := executeFlagAction(
 		cfg, *install, *check, *status, *restartWarp,
-		*updateXray, *renewCert, *backup, *restore, *uninstall,
+		*updateXray, *renewCert, *backup, *version, *restore, *uninstall,
 	); err != nil {
 		internal.PrintRed("操作失败: %v", err)
 
@@ -143,11 +145,14 @@ func loadConfigForFlagAction(check bool) (*config.Config, error) {
 // checking errors on every service call.
 func executeFlagAction(
 	cfg *config.Config,
-	install, check, status, restartWarp, updateXray, renewCert, backup bool,
+	install, check, status, restartWarp, updateXray, renewCert, backup, version bool,
 	restore string,
 	uninstall bool,
 ) error {
 	switch {
+	case version:
+		fmt.Printf("xrayctl %s\n", internal.Version)
+
 	case install:
 		internal.PrintGreen("开始一键安装...")
 
