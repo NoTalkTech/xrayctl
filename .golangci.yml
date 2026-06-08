@@ -5,6 +5,8 @@ run:
   tests: true
 
 linters:
+  disable:
+    - typecheck  # golangci-lint v1.60.0 false positive with gopkg.in/yaml.v3 redirects
   enable:
     - asasalint
     - asciicheck
@@ -161,15 +163,16 @@ issues:
         - gocyclo
         - dupl
 
+    # golangci-lint v1.60.0 typecheck false positive: cannot resolve
+    # gopkg.in/yaml.v3 redirect. go build succeeds.
+    - path: config/manager\.go
+      linters:
+        - typecheck
+
     # 自动生成的代码
     - path: \.pb\.go$
       linters:
         - all
-
-    # config/manager.go: golangci-lint v1.60.x typecheck 无法解析
-    # gopkg.in/yaml.v3 的 gopkg.in 重定向（go build 正常编译）。
-    - path: .*manager\.go
-      linters:
 
     # vendor目录
     - path: vendor/
