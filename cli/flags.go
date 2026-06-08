@@ -37,7 +37,6 @@ func ParseFlags() int {
 
 	// --version does not require root or config; handle it before any checks.
 	if *version {
-		fmt.Printf("xrayctl %s\n", internal.Version)
 		return 0
 	}
 
@@ -129,7 +128,7 @@ func ParseFlags() int {
 
 	if err := executeFlagAction(
 		cfg, *install, *check, *status, *restartWarp,
-		*updateXray, *renewCert, *backup, *version, *restore, *uninstall,
+		*updateXray, *renewCert, *backup, *restore, *uninstall,
 	); err != nil {
 		internal.PrintRed("操作失败: %v", err)
 
@@ -151,13 +150,11 @@ func loadConfigForFlagAction(check bool) (*config.Config, error) {
 // checking errors on every service call.
 func executeFlagAction(
 	cfg *config.Config,
-	install, check, status, restartWarp, updateXray, renewCert, backup, version bool,
+	install, check, status, restartWarp, updateXray, renewCert, backup bool,
 	restore string,
 	uninstall bool,
 ) error {
 	switch {
-	case version:
-		fmt.Printf("xrayctl %s\n", internal.Version)
 
 	case install:
 		internal.PrintGreen("开始一键安装...")
