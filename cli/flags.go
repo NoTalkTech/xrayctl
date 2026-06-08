@@ -155,7 +155,6 @@ func executeFlagAction(
 	uninstall bool,
 ) error {
 	switch {
-
 	case install:
 		internal.PrintGreen("开始一键安装...")
 

@@ -34,5 +34,6 @@ func TranslateError(err error) string {
 			return p.text
 		}
 	}
+
 	return msg
 }
