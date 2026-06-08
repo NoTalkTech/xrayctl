@@ -30,3 +30,9 @@ const (
 	AcmeRootPath = "/root/.acme.sh"
 	AcmeShPath   = "/root/.acme.sh/acme.sh"
 )
+
+// InstallCompleteMarker 成功安装后创建此标记文件；缺少此文件表示安装不完整或从未完成。
+const InstallCompleteMarker = "/etc/xrayctl/.install-complete"
+
+// Version 通过 ldflags 在构建时注入。go build 无 -ldflags 时默认显示 "dev"。
+var Version = "dev"
