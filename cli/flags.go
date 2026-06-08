@@ -35,6 +35,12 @@ func ParseFlags() int {
 
 	flag.Parse()
 
+	// --version does not require root or config; handle it before any checks.
+	if *version {
+		fmt.Printf("xrayctl %s\n", internal.Version)
+		return 0
+	}
+
 	// 没有任何参数：回到交互菜单
 	if len(os.Args) <= 1 {
 		return -1
