@@ -198,7 +198,9 @@ func touchInstallComplete() error {
 		return fmt.Errorf("create marker: %w", err)
 	}
 
-	defer f.Close()
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close marker: %w", err)
+	}
 
 	return nil
 }
