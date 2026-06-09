@@ -39,8 +39,8 @@ func ShowMenu() {
 
 		// 显示当前状态摘要
 		internal.PrintGreen("==========================================")
-		internal.PrintGreen("|      Xray-WARP 精准分流管理系统        |")
-		internal.PrintGreen("|      (VLESS + XTLS + Nginx Fallback)   |")
+		internal.PrintGreen("|           自建 VPN 管理工具            |")
+		internal.PrintGreen("|     一键安装 · 智能分流 · 自动续签     |")
 		internal.PrintGreen("==========================================")
 
 		if cfg.Domain != "" {

@@ -10,7 +10,13 @@ import (
 func main() {
 	switch cli.ParseFlags() {
 	case -1:
-		cli.ShowMenu()
+		// No flags provided — decide between wizard and menu.
+		if cli.ShouldShowWizard() {
+			cli.ShowGuidedSetup()
+		} else {
+			cli.ShowMenu()
+		}
+
 	case 1:
 		os.Exit(1)
 	}

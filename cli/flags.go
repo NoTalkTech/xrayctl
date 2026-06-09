@@ -30,9 +30,15 @@ func ParseFlags() int {
 		backup      = flag.Bool("backup", false, "备份配置与证书")
 		restore     = flag.String("restore", "", "从指定备份文件恢复")
 		uninstall   = flag.Bool("uninstall", false, "卸载所有组件")
+		version     = flag.Bool("version", false, "显示版本信息")
 	)
 
 	flag.Parse()
+
+	// --version does not require root or config; handle it before any checks.
+	if *version {
+		return 0
+	}
 
 	// 没有任何参数：回到交互菜单
 	if len(os.Args) <= 1 {
@@ -58,6 +64,7 @@ func ParseFlags() int {
 		{*backup, "--backup"},
 		{*restore != "", "--restore"},
 		{*uninstall, "--uninstall"},
+		{*version, "--version"},
 	}
 	var chosen []string
 

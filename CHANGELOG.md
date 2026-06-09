@@ -1,6 +1,19 @@
 # Changelog
 
-## [Unreleased]
+## [v0.0.2] - 2026-06-08
+
+### Added
+- 首次运行安装向导：自动检测新用户，引导输入域名和邮箱，安装前环境预检 + 确认步骤
+- `--version` 查看版本信息（支持 ldflags 注入构建信息）
+- 安装过程进度提示 `[1/5]...[5/5]`
+- 常见错误信息中文翻译：软件包未找到、端口被占用、证书申请失败
+- 安装完成标记文件（`.install-complete`），用于区分首次安装和部分安装失败
+
+### Changed
+- TUI 菜单标题简化：替换 VLESS 技术术语为通俗中文
+- README 重写：面向非技术用户，添加准备清单、快速开始、常见问题
+
+## [2026-06-08]
 
 - Add `--email` flag for non-interactive cert setup
 - Add gstack skill routing to CLAUDE.md
