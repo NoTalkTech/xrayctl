@@ -64,7 +64,7 @@ func ParseFlags() int {
 		{*backup, "--backup"},
 		{*restore != "", "--restore"},
 		{*uninstall, "--uninstall"},
-		{*version, "--version"},
+		// --version is handled by early return above; not included here.
 	}
 	var chosen []string
 
